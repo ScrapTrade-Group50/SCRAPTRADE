@@ -8,7 +8,7 @@ export default function CompanyDetails() {
   const router = useRouter();
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-background" style={{ flex: 1 }} edges={['top']}>
       
       {/* Header */}
       <View className="flex-row justify-between items-center px-6 py-4 bg-background border-b border-border">
@@ -23,7 +23,11 @@ export default function CompanyDetails() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={{ flex: 1 }} 
+        contentContainerClassName="px-6 pt-6 pb-12" 
+        showsVerticalScrollIndicator={false}
+      >
         
         {/* Logo Edit */}
         <View className="items-center mb-8 pt-4">

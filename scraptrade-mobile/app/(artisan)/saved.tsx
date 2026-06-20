@@ -19,7 +19,7 @@ const SAVED_LISTINGS = [
 
 export default function SavedListings() {
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-background" style={{ flex: 1 }} edges={['top']}>
       
       {/* Header */}
       <View className="px-6 py-4 bg-background border-b border-border">
@@ -27,9 +27,9 @@ export default function SavedListings() {
       </View>
 
       <ScrollView 
-        className="flex-1 px-6 pt-6"
+        style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="pb-24"
+        contentContainerClassName="px-6 pt-6 pb-24"
       >
         {SAVED_LISTINGS.length > 0 ? (
           <View className="gap-4">

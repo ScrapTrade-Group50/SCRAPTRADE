@@ -8,7 +8,7 @@ export default function HelpSupport() {
   const router = useRouter();
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-background" style={{ flex: 1 }} edges={['top']}>
       
       {/* Header */}
       <View className="flex-row items-center px-6 py-4 bg-background border-b border-border">
@@ -18,7 +18,11 @@ export default function HelpSupport() {
         <Text className="text-xl font-sans-bold text-primary">Help & Support</Text>
       </View>
 
-      <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={{ flex: 1 }} 
+        contentContainerClassName="px-6 pt-6 pb-12" 
+        showsVerticalScrollIndicator={false}
+      >
         
         {/* Intro Text */}
         <Text className="text-2xl font-sans-extrabold text-primary mb-2">How can we help?</Text>
@@ -28,9 +32,9 @@ export default function HelpSupport() {
 
         {/* Contact Cards Grid */}
         <View className="flex-row justify-between mb-8">
-          {/* WhatsApp Button */}
+          {/* WhatsApp Button - Added 'brand' prop here! */}
           <TouchableOpacity className="flex-1 bg-[#25D366]/10 border border-[#25D366]/20 rounded-2xl p-5 items-center mr-2 shadow-sm">
-            <FontAwesome5 name="whatsapp" size={28} color="#25D366" className="mb-3" />
+            <FontAwesome5 name="whatsapp" brand size={28} color="#25D366" className="mb-3" />
             <Text className="text-sm font-sans-bold text-primary">Chat</Text>
             <Text className="text-xs font-sans-medium text-muted-foreground text-center mt-1">Quick replies</Text>
           </TouchableOpacity>
