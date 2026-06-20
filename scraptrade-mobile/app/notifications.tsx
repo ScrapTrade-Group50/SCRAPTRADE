@@ -38,7 +38,7 @@ const MOCK_NOTIFICATIONS = [
     icon: 'award',
     color: 'text-orange-600',
     bgColor: 'bg-orange-100',
-  }
+  },
 ];
 
 export default function Notifications() {
@@ -46,62 +46,53 @@ export default function Notifications() {
 
   return (
     <SafeAreaView className="flex-1 bg-slate-50" style={{ flex: 1 }} edges={['top']}>
-      
       {/* HEADER */}
-      <View className="px-6 py-4 bg-white border-b border-slate-200 z-10 flex-row justify-between items-center shadow-sm">
+      <View className="z-10 flex-row items-center justify-between border-b border-slate-200 bg-white px-6 py-4 shadow-sm">
         <View className="flex-row items-center">
           <TouchableOpacity onPress={() => router.back()} className="mr-4 p-1">
             <Feather name="arrow-left" size={24} color="#0f172a" />
           </TouchableOpacity>
           <Text className="text-2xl font-bold text-slate-900">Notifications</Text>
         </View>
-        
+
         {/* Mark all as read button */}
         <TouchableOpacity>
-          <Feather name="check-all" size={20} color="#64748b" />
+          <Feather name="check" size={20} color="#64748b" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={{ flex: 1 }}
         contentContainerClassName="pb-12"
-        showsVerticalScrollIndicator={false}
-      >
+        showsVerticalScrollIndicator={false}>
         {MOCK_NOTIFICATIONS.map((note) => (
-          <TouchableOpacity 
-            key={note.id} 
-            className={`flex-row p-5 border-b border-slate-200 ${
+          <TouchableOpacity
+            key={note.id}
+            className={`flex-row border-b border-slate-200 p-5 ${
               note.isUnread ? 'bg-blue-50/50' : 'bg-white'
-            }`}
-          >
+            }`}>
             {/* Icon */}
-            <View className={`h-12 w-12 rounded-full items-center justify-center mr-4 ${note.bgColor}`}>
+            <View
+              className={`mr-4 h-12 w-12 items-center justify-center rounded-full ${note.bgColor}`}>
               <Feather name={note.icon as any} size={20} className={note.color} />
             </View>
 
             {/* Content */}
             <View className="flex-1">
-              <View className="flex-row justify-between items-start mb-1">
-                <Text className="text-base font-bold text-slate-900 pr-4 flex-1">
-                  {note.title}
-                </Text>
-                <Text className="text-xs font-medium text-slate-400 mt-1">
-                  {note.time}
-                </Text>
+              <View className="mb-1 flex-row items-start justify-between">
+                <Text className="flex-1 pr-4 text-base font-bold text-slate-900">{note.title}</Text>
+                <Text className="mt-1 text-xs font-medium text-slate-400">{note.time}</Text>
               </View>
-              <Text className="text-sm font-medium text-slate-600 leading-snug">
+              <Text className="text-sm leading-snug font-medium text-slate-600">
                 {note.message}
               </Text>
             </View>
 
             {/* Unread Indicator Dot */}
-            {note.isUnread && (
-              <View className="h-2 w-2 bg-blue-600 rounded-full mt-2 ml-3" />
-            )}
+            {note.isUnread && <View className="mt-2 ml-3 h-2 w-2 rounded-full bg-blue-600" />}
           </TouchableOpacity>
         ))}
       </ScrollView>
-
     </SafeAreaView>
   );
 }

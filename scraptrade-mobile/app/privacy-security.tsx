@@ -12,7 +12,7 @@ export default function PrivacySecurity() {
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+    <SafeAreaView className="flex-1 bg-background" style={{ flex: 1 }} edges={['top']}>
       
       {/* Header */}
       <View className="flex-row items-center px-6 py-4 bg-background border-b border-border">
@@ -22,7 +22,11 @@ export default function PrivacySecurity() {
         <Text className="text-xl font-sans-bold text-primary">Privacy & Security</Text>
       </View>
 
-      <ScrollView className="flex-1 px-6 pt-6" showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={{ flex: 1 }} 
+        contentContainerClassName="px-6 pt-6 pb-12" 
+        showsVerticalScrollIndicator={false}
+      >
         
         {/* SECTION: Login & Security */}
         <Text className="text-sm font-sans-bold text-muted-foreground uppercase tracking-widest mb-3 ml-1">
