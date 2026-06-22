@@ -1,38 +1,76 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
   TouchableOpacity, 
   ScrollView, 
   Image,
-  Dimensions
+  Dimensions,
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { useRouter, Link } from 'expo-router';
+import { useRouter, useLocalSearchParams, Link } from 'expo-router';
+import { apiClient } from '../../api/client';
 
-// Get screen width for the full-width image carousel
 const { width } = Dimensions.get('window');
 
-// Dummy data for the specific listing
-const MOCK_LISTING = {
-  id: '1',
-  category: 'METAL',
-  title: 'High-Carbon Steel Off-cuts',
-  weight: '120 kg',
-  price: '450',
-  dimensions: 'Varies: approx. 10cm x 15cm pieces',
-  thickness: '5mm - 8mm',
-  factoryName: 'Suame Industrial Works',
-  distance: '2.5 km away',
-  images: [
-    'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=800&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1504913659239-6abc87875a63?q=80&w=800&auto=format&fit=crop',
-  ]
+// 1. Define the exact shape of our backend data
+type Listing = {
+  id: number;
+  title: string;
+  weight: number;
+  pricePerUnit: number;
+  status: string;
+  imageUrl: string | null;
+  dimensions: string;
+  seller?: {
+    name: string;
+  };
 };
 
 export default function ListingDetail() {
   const router = useRouter();
+  const { id } = useLocalSearchParams(); // Extract the ID from the previous screen
+
+  // 2. The Data Engine
+  const [listing, setListing] = useState<Listing | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchListingDetail = async () => {
+      try {
+        const response = await apiClient.get(`/listings/${id}`);
+        setListing(response.data);
+      } catch (error) {
+        console.error('Failed to fetch listing details:', error);
+        Alert.alert("Error", "Could not load item details. It may have been sold or removed.");
+        router.back();
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (id) fetchListingDetail();
+  }, [id]);
+
+  // Loading Screen
+  if (isLoading) {
+    return (
+      <SafeAreaView style={{ flex: 1 }} className="bg-background items-center justify-center">
+        <ActivityIndicator size="large" color="#16a34a" />
+        <Text className="mt-4 font-sans-medium text-muted-foreground">Loading details...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  // Fallback if data is unexpectedly null
+  if (!listing) return null;
+
+  // Calculate the total checkout price
+  const totalPrice = (listing.weight * (listing.pricePerUnit || 0)).toFixed(2);
+  const factoryDisplayName = listing.seller?.name || "Verified Factory";
 
   return (
     <SafeAreaView className="flex-1 bg-background" style={{ flex: 1 }} edges={['top']}>
@@ -50,33 +88,21 @@ export default function ListingDetail() {
       <ScrollView 
         style={{ flex: 1 }} 
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="pb-32" // Padding at the bottom so the sticky button doesn't hide content
+        contentContainerClassName="pb-32" 
         bounces={false}
       >
         
-        {/* 1. Header: Full-Width Image Carousel */}
-        <View className="h-80 w-full bg-card">
-          <ScrollView 
-            horizontal 
-            pagingEnabled 
-            showsHorizontalScrollIndicator={false}
-            bounces={false}
-          >
-            {MOCK_LISTING.images.map((img, index) => (
-              <Image 
-                key={index}
-                source={{ uri: img }}
-                style={{ width, height: 320 }}
-                resizeMode="cover"
-              />
-            ))}
-          </ScrollView>
-          {/* Simple Carousel Indicator */}
-          <View className="absolute bottom-4 w-full flex-row justify-center gap-2">
-            {MOCK_LISTING.images.map((_, index) => (
-              <View key={index} className="h-2 w-2 rounded-full bg-white/80" />
-            ))}
-          </View>
+        {/* 1. Header: Image Display */}
+        <View className="h-80 w-full bg-slate-200 items-center justify-center">
+          {listing.imageUrl ? (
+             <Image 
+               source={{ uri: listing.imageUrl }}
+               style={{ width, height: 320 }}
+               resizeMode="cover"
+             />
+          ) : (
+            <Feather name="image" size={48} color="#94a3b8" />
+          )}
         </View>
 
         {/* 2. Body: Details & Typography */}
@@ -84,20 +110,23 @@ export default function ListingDetail() {
           <View className="flex-row justify-between items-start mb-2">
             <View className="bg-accent/10 px-3 py-1.5 rounded-lg">
               <Text className="text-xs font-sans-bold text-accent tracking-widest uppercase">
-                {MOCK_LISTING.category}
+                MATERIAL
               </Text>
             </View>
-            <Text className="text-3xl font-sans-extrabold text-green-600">{MOCK_LISTING.price} GHS</Text>
+            <View className="items-end">
+              <Text className="text-3xl font-sans-extrabold text-green-600">GHS {totalPrice}</Text>
+              <Text className="text-xs font-sans-medium text-muted-foreground">Total (GHS {listing.pricePerUnit.toFixed(2)}/kg)</Text>
+            </View>
           </View>
 
-          <Text className="text-3xl font-sans-bold text-primary mb-2">
-            {MOCK_LISTING.title}
+          <Text className="text-3xl font-sans-bold text-primary mb-2 mt-2">
+            {listing.title}
           </Text>
 
           <View className="flex-row items-center mb-8">
             <Feather name="map-pin" size={16} color="#64748b" />
             <Text className="text-base font-sans-medium text-muted-foreground ml-2">
-              {MOCK_LISTING.factoryName} • {MOCK_LISTING.distance}
+              {factoryDisplayName} • TBD km
             </Text>
           </View>
 
@@ -109,15 +138,15 @@ export default function ListingDetail() {
           <View className="flex-row flex-wrap gap-y-6">
             <View className="w-1/2 pr-4">
               <Text className="text-sm font-sans-medium text-muted-foreground mb-1">Total Weight</Text>
-              <Text className="text-xl font-sans-bold text-primary">{MOCK_LISTING.weight}</Text>
+              <Text className="text-xl font-sans-bold text-primary">{listing.weight} kg</Text>
             </View>
             <View className="w-1/2 pr-4">
-              <Text className="text-sm font-sans-medium text-muted-foreground mb-1">Thickness</Text>
-              <Text className="text-xl font-sans-bold text-primary">{MOCK_LISTING.thickness}</Text>
+              <Text className="text-sm font-sans-medium text-muted-foreground mb-1">Status</Text>
+              <Text className="text-xl font-sans-bold text-green-600">Available</Text>
             </View>
             <View className="w-full">
               <Text className="text-sm font-sans-medium text-muted-foreground mb-1">Dimensions</Text>
-              <Text className="text-xl font-sans-bold text-primary">{MOCK_LISTING.dimensions}</Text>
+              <Text className="text-xl font-sans-bold text-primary">{listing.dimensions || "Not specified"}</Text>
             </View>
           </View>
 
@@ -126,9 +155,8 @@ export default function ListingDetail() {
 
       {/* 3. Action: Sticky Checkout Button */}
       <View className="absolute bottom-0 w-full px-6 py-6 bg-background border-t border-border">
-        {/* We will route this to the MoMo Checkout screen next */}
-        <Link href="/checkout" asChild>
-          {/* Using primary for the dark high-contrast button like the original slate-900 */}
+        {/* Pass the ID to the checkout screen so it knows what to buy */}
+        <Link href={`/(artisan)/checkout?id=${listing.id}`} asChild>
           <TouchableOpacity className="w-full items-center rounded-xl bg-primary py-4 shadow-sm flex-row justify-center gap-3">
             <Feather name="shopping-bag" size={20} color="#ffffff" />
             <Text className="text-lg font-sans-bold text-white">Checkout with MoMo</Text>

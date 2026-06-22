@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -8,46 +8,34 @@ import {
   Image,
   Modal,
   Pressable,
-  StatusBar
+  StatusBar,
+  ActivityIndicator,
+  RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons'; 
 import Slider from '@react-native-community/slider';
-// 1. Added the Link import here!
 import { Link } from 'expo-router';
+import { apiClient } from '../../api/client'; // <-- Imported your API Client
 
-// --- DUMMY DATA FOR UI TESTING ---
-const MOCK_SCRAP_DATA = [
-  {
-    id: '1',
-    category: 'METAL',
-    title: 'High-Carbon Steel Off-cuts',
-    weight: '120 kg',
-    price: '450 GHS',
-    distance: '2.5 km',
-    imageUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=600&auto=format&fit=crop',
-  },
-  {
-    id: '2',
-    category: 'WOOD',
-    title: 'Hardwood Timber (Mahogany)',
-    weight: '45 kg',
-    price: '180 GHS',
-    distance: '5.1 km',
-    imageUrl: 'https://images.unsplash.com/photo-1610555356070-d1fcb49abeb3?q=80&w=600&auto=format&fit=crop',
-  },
-  {
-    id: '3',
-    category: 'TEXTILE',
-    title: 'Cotton Canvas Fabric Rolls',
-    weight: '15 kg',
-    price: '90 GHS',
-    distance: '1.2 km',
-    imageUrl: 'https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?q=80&w=600&auto=format&fit=crop',
-  }
-];
+// 1. Defined the REAL backend data structure
+type Listing = {
+  id: number;
+  title: string;
+  weight: number;
+  pricePerUnit: number;
+  status: string;
+  imageUrl: string | null;
+  dimensions: string;
+};
 
 export default function ArtisanFeed() {
+  // 2. State Engine for live data
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const [searchQuery, setSearchQuery] = useState('');
   
   // Filter Modal States
@@ -56,59 +44,86 @@ export default function ArtisanFeed() {
   const [maxPrice, setMaxPrice] = useState(500);
   const [maxDistance, setMaxDistance] = useState(15);
 
-  // Individual Listing Card Component
-  const renderScrapCard = ({ item }: { item: typeof MOCK_SCRAP_DATA[0] }) => (
-    // 2. Wrapped the TouchableOpacity in a Link component pointing to the detail page
+  // 3. The Fetch Function
+  const fetchListings = async () => {
+    setErrorMessage(null);
+    try {
+      // Fetch ONLY available listings from the database
+      const response = await apiClient.get('/listings');
+      // Filter out anything that isn't explicitly AVAILABLE just to be safe
+      const availableItems = response.data.filter((item: Listing) => item.status === 'AVAILABLE');
+      setListings(availableItems);
+    } catch (error: any) {
+      console.error('Failed to fetch feed:', error);
+      setErrorMessage(error.response?.data?.message || "Could not connect to server");
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchListings();
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchListings();
+  };
+
+  // 4. Mapped the card to use the real 'item' fields
+  const renderScrapCard = ({ item }: { item: Listing }) => (
     <Link href={`/(artisan)/listing-detail?id=${item.id}`} asChild>
       <TouchableOpacity 
         activeOpacity={0.9} 
         className="bg-card rounded-[28px] mb-6 shadow-sm border border-border overflow-hidden"
       >
-        {/* Image & Floating Badges */}
         <View className="relative">
-          <Image 
-            source={{ uri: item.imageUrl }} 
-            className="w-full h-52 bg-muted"
-            resizeMode="cover"
-          />
+          {item.imageUrl ? (
+            <Image 
+              source={{ uri: item.imageUrl }} 
+              className="w-full h-52 bg-muted"
+              resizeMode="cover"
+            />
+          ) : (
+            <View className="w-full h-52 bg-slate-200 items-center justify-center">
+              <Feather name="image" size={40} color="#94a3b8" />
+            </View>
+          )}
           
-          {/* Floating Category Badge */}
           <View className="absolute top-4 left-4 bg-accent px-3 py-1.5 rounded-full shadow-sm">
             <Text className="text-white text-xs font-sans-bold tracking-widest uppercase">
-              {item.category}
+              MATERIAL
             </Text>
           </View>
 
-          {/* Save/Bookmark Button */}
-          <TouchableOpacity 
-            className="absolute top-4 right-4 bg-card/90 p-2.5 rounded-full shadow-sm"
-          >
+          <TouchableOpacity className="absolute top-4 right-4 bg-card/90 p-2.5 rounded-full shadow-sm">
             <Feather name="bookmark" size={18} color="#081126" />
           </TouchableOpacity>
         </View>
         
-        {/* Card Content */}
         <View className="p-5">
           <Text className="text-xl font-sans-bold text-primary mb-1.5" numberOfLines={1}>
             {item.title}
           </Text>
 
-          <View className="flex-row items-center mb-5">
-            <Feather name="map-pin" size={14} color="#64748b" />
-            <Text className="text-sm font-sans-medium text-muted-foreground ml-1.5">
-              {item.distance} away
-            </Text>
-          </View>
+          {item.dimensions ? (
+            <View className="flex-row items-center mb-5">
+              <Feather name="maximize" size={14} color="#64748b" />
+              <Text className="text-sm font-sans-medium text-muted-foreground ml-1.5">
+                {item.dimensions}
+              </Text>
+            </View>
+          ) : <View className="h-4 mb-5" /> /* Spacer if no dimensions */}
 
-          {/* Pricing & Weight Footer */}
           <View className="flex-row justify-between items-center pt-4 border-t border-border">
             <View>
               <Text className="text-xs font-sans-medium text-muted-foreground mb-1 uppercase tracking-wider">Weight</Text>
-              <Text className="text-lg font-sans-bold text-primary">{item.weight}</Text>
+              <Text className="text-lg font-sans-bold text-primary">{item.weight} kg</Text>
             </View>
             <View className="items-end">
               <Text className="text-xs font-sans-medium text-muted-foreground mb-1 uppercase tracking-wider">Price</Text>
-              <Text className="text-2xl font-sans-extrabold text-success">{item.price}</Text>
+              <Text className="text-2xl font-sans-extrabold text-green-600">GHS {(item.pricePerUnit ?? 0).toFixed(2)}</Text>
             </View>
           </View>
         </View>
@@ -117,7 +132,7 @@ export default function ArtisanFeed() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+    <SafeAreaView style={{ flex: 1 }} className="bg-background" edges={['top']}>
       <StatusBar barStyle="dark-content" />
       
       {/* HEADER: Title & Search */}
@@ -148,16 +163,42 @@ export default function ArtisanFeed() {
         </View>
       </View>
 
-      {/* BODY: Vertical Scrolling List */}
-      <FlatList
-        data={MOCK_SCRAP_DATA}
-        keyExtractor={(item) => item.id}
-        renderItem={renderScrapCard}
-        contentContainerClassName="p-5 pb-24"
-        showsVerticalScrollIndicator={false}
-      />
+      {/* BODY: Live Data List */}
+      {errorMessage ? (
+        <View className="px-5 mt-4">
+          <View className="bg-red-100 p-4 rounded-xl border border-red-300">
+            <Text className="text-red-800 font-sans-bold text-sm">Connection Error:</Text>
+            <Text className="text-red-600 font-sans-medium text-sm mt-1">{errorMessage}</Text>
+            <TouchableOpacity onPress={fetchListings} className="mt-3 bg-red-800 px-4 py-2 rounded-lg self-start">
+              <Text className="text-white font-sans-bold text-xs">Try Again</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : isLoading ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#ea7a53" />
+        </View>
+      ) : (
+        <FlatList
+          style={{ flex: 1 }}
+          data={listings}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderScrapCard}
+          contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListEmptyComponent={
+            <View className="flex-1 items-center justify-center pt-20">
+              <Feather name="inbox" size={48} color="#cbd5e1" />
+              <Text className="text-muted-foreground font-sans-medium mt-4 text-center">
+                No materials available right now.{"\n"}Pull down to refresh.
+              </Text>
+            </View>
+          }
+        />
+      )}
 
-      {/* MODAL: Advanced Filters (Bottom Sheet Style) */}
+      {/* MODAL: Advanced Filters */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -171,8 +212,6 @@ export default function ArtisanFeed() {
           />
           
           <View className="bg-background h-[80%] rounded-t-[32px] mt-auto shadow-2xl">
-            
-            {/* Modal Header & Drag Indicator */}
             <View className="items-center pt-3 pb-2">
               <View className="w-12 h-1.5 bg-border rounded-full" />
             </View>
@@ -187,10 +226,7 @@ export default function ArtisanFeed() {
               </TouchableOpacity>
             </View>
 
-            {/* Modal Body */}
             <View className="px-6 py-6 flex-1 gap-8">
-              
-              {/* Category Chips */}
               <View>
                 <Text className="text-base font-sans-bold text-primary mb-4">Material Category</Text>
                 <View className="flex-row flex-wrap gap-3">
@@ -199,14 +235,10 @@ export default function ArtisanFeed() {
                       key={cat}
                       onPress={() => setSelectedCategory(cat)}
                       className={`px-6 py-3 rounded-2xl border-2 ${
-                        selectedCategory === cat 
-                          ? 'border-accent bg-accent/10' 
-                          : 'border-border bg-card'
+                        selectedCategory === cat ? 'border-accent bg-accent/10' : 'border-border bg-card'
                       }`}
                     >
-                      <Text className={`font-sans-bold ${
-                        selectedCategory === cat ? 'text-accent' : 'text-muted-foreground'
-                      }`}>
+                      <Text className={`font-sans-bold ${selectedCategory === cat ? 'text-accent' : 'text-muted-foreground'}`}>
                         {cat}
                       </Text>
                     </TouchableOpacity>
@@ -214,7 +246,6 @@ export default function ArtisanFeed() {
                 </View>
               </View>
 
-              {/* Price Slider */}
               <View>
                 <View className="flex-row justify-between items-center mb-4">
                   <Text className="text-base font-sans-bold text-primary">Max Price (per kg)</Text>
@@ -232,29 +263,8 @@ export default function ArtisanFeed() {
                   thumbTintColor="#ea7a53"
                 />
               </View>
-
-              {/* Distance Slider */}
-              <View>
-                <View className="flex-row justify-between items-center mb-4">
-                  <Text className="text-base font-sans-bold text-primary">Proximity</Text>
-                  <Text className="text-lg font-sans-bold text-accent">Within {maxDistance} km</Text>
-                </View>
-                <Slider
-                  style={{ width: '100%', height: 40 }}
-                  minimumValue={1}
-                  maximumValue={50}
-                  step={1}
-                  value={maxDistance}
-                  onValueChange={setMaxDistance}
-                  minimumTrackTintColor="#ea7a53"
-                  maximumTrackTintColor="rgba(0, 0, 0, 0.1)"
-                  thumbTintColor="#ea7a53"
-                />
-              </View>
-
             </View>
 
-            {/* Modal Footer */}
             <View className="px-6 pb-10 pt-4 border-t border-border bg-card">
               <TouchableOpacity
                 activeOpacity={0.8}
@@ -264,7 +274,6 @@ export default function ArtisanFeed() {
                 <Text className="text-lg font-sans-bold text-white">Apply Filters</Text>
               </TouchableOpacity>
             </View>
-
           </View>
         </View>
       </Modal>

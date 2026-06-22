@@ -2,8 +2,8 @@ import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-// 1. Added Link to the expo-router import
 import { useRouter, Link } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // <-- Imported AsyncStorage
 import { useAuthStore } from '@/store/authStore';
 
 export default function Profile() {
@@ -29,13 +29,26 @@ export default function Profile() {
         { 
           text: "Sign Out", 
           style: "destructive", 
-          onPress: () => logout() 
+          onPress: async () => {
+            try {
+              // 1. Clear global state
+              logout(); 
+              
+              // 2. Shred the VIP token from the phone's secure memory
+              await AsyncStorage.removeItem('token'); 
+              
+              // 3. Immediately redirect them to the Auth stack
+              router.replace('/(auth)/sign-in');
+              
+            } catch (error) {
+              console.error("Error during logout:", error);
+            }
+          } 
         }
       ]
     );
   };
 
-  // 2. Upgraded the helper function to accept an optional 'href' route!
   const renderMenuItem = (icon: any, title: string, subtitle?: string, href?: string) => {
     const MenuItemContent = (
       <TouchableOpacity className="flex-row items-center justify-between bg-card p-4 rounded-2xl mb-3 border border-border shadow-sm">

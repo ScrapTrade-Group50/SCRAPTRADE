@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, Link } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // <-- Imported AsyncStorage
 import { useAuthStore } from '@/store/authStore';
 
 export default function FactoryProfile() {
@@ -28,7 +29,21 @@ export default function FactoryProfile() {
         { 
           text: "Sign Out", 
           style: "destructive", 
-          onPress: () => logout() 
+          onPress: async () => {
+            try {
+              // 1. Clear global state (your existing Zustand logic)
+              logout(); 
+              
+              // 2. Shred the VIP token from the phone's secure memory
+              await AsyncStorage.removeItem('token'); 
+              
+              // 3. Immediately redirect them to the Auth stack
+              router.replace('/(auth)/sign-in');
+              
+            } catch (error) {
+              console.error("Error during logout:", error);
+            }
+          } 
         }
       ]
     );
@@ -94,7 +109,6 @@ export default function FactoryProfile() {
         {/* 2. Business Settings */}
         <Text className="text-sm font-sans-bold text-muted-foreground uppercase tracking-widest mb-3 ml-2">Business Settings</Text>
         {renderMenuItem("briefcase", "Company Details", "Registration and contact info", "/company-details")}
-        {/* Reusing the MoMo details screen we built for Artisans! */}
         {renderMenuItem("dollar-sign", "Payout Methods", "Manage your bank and MoMo details", "/momo-details")}
         {renderMenuItem("map-pin", "Warehouse Locations", "Manage your scrap pickup addresses", "/warehouse-locations")}
         {renderMenuItem("bar-chart-2", "Sales History", "View your past sales and revenue", "/transactions")}
@@ -102,7 +116,6 @@ export default function FactoryProfile() {
         {/* 3. Preferences */}
         <Text className="text-sm font-sans-bold text-muted-foreground uppercase tracking-widest mb-3 ml-2 mt-6">Preferences</Text>
         {renderMenuItem("bell", "Notifications", "Alerts for new orders and pickups", "/notifications")}
-        {/* Reusing our universal security and support screens! */}
         {renderMenuItem("shield", "Privacy & Security", "Password and app lock", "/privacy-security")}
         {renderMenuItem("help-circle", "Help & Support", "Contact SCRAPTRADE support", "/help-support")}
         

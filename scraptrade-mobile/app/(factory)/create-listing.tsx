@@ -7,59 +7,164 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import { apiClient } from '../../api/client'; // Adjust path if needed
 
 export default function CreateListing() {
   const router = useRouter();
+
+  // --- STATE MANAGEMENT ---
   const [category, setCategory] = useState('METAL');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [weight, setWeight] = useState('');
+  const [dimensions, setDimensions] = useState('');
+  const [price, setPrice] = useState('');
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // --- 1. PHOTO PICKER FUNCTION ---
+  const pickImage = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (permissionResult.granted === false) {
+      Alert.alert('Permission Required', 'You need to allow photo access to upload scrap images.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      setImageUri(result.assets[0].uri);
+    }
+  };
+
+  // --- 2. BACKEND SUBMISSION FUNCTION ---
+  const handleSubmit = async () => {
+    if (!title || !weight || !price || !imageUri) {
+      Alert.alert('Missing Info', 'Please fill in the title, weight, price, and select a photo.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // Phase 1: Create the database record (hardcoded sellerId=1 for testing)
+      const listingResponse = await apiClient.post('/listings?sellerId=1', {
+        title: title,
+        description: description,
+        weight: parseFloat(weight),
+        dimensions: dimensions,
+        pricePerUnit: parseFloat(price),
+      });
+
+      const newListingId = listingResponse.data.id;
+
+      // Phase 2: Upload the physical image to Cloudinary
+      const formData = new FormData();
+      const filename = imageUri.split('/').pop() || 'image.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : `image`;
+
+      formData.append('file', {
+        uri: imageUri,
+        name: filename,
+        type: type,
+      } as any);
+
+      await apiClient.post(`/listings/${newListingId}/image`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      // Phase 3: Success! Navigate back to the dashboard (WEB & MOBILE SAFE)
+      if (Platform.OS === 'web') {
+        window.alert('Success! Your scrap listing is now live.');
+        router.back();
+      } else {
+        Alert.alert('Success!', 'Your scrap listing is now live.', [
+          {
+            text: 'OK',
+            onPress: () => {
+              // The setTimeout forces the app to wait for the popup to close before navigating
+              setTimeout(() => {
+                router.back();
+              }, 100);
+            },
+          },
+        ]);
+      }
+    } catch (error: any) {
+      console.error('Upload failed:', error);
+      Alert.alert('Upload Failed', 'Something went wrong while connecting to the server.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
-    <SafeAreaView className="flex-1 bg-background" style={{ flex: 1 }} edges={['top']}>
-      
+    <SafeAreaView className="bg-background flex-1" style={{ flex: 1 }} edges={['top']}>
       {/* HEADER: Navigation */}
-      <View className="flex-row items-center px-6 py-4 border-b border-border bg-background">
+      <View className="border-border bg-background flex-row items-center border-b px-6 py-4">
         <TouchableOpacity onPress={() => router.back()} className="mr-4 p-1">
           <Feather name="arrow-left" size={24} color="#0f172a" />
         </TouchableOpacity>
-        <Text className="text-xl font-sans-bold text-primary">New Listing</Text>
+        <Text className="font-sans-bold text-primary text-xl">New Listing</Text>
       </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}>
-        
-        {/* Added explicit flex: 1 to the ScrollView to stop it from collapsing */}
         <ScrollView
           style={{ flex: 1 }}
           contentContainerClassName="px-6 py-6"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-
-          {/* Photo Upload Placeholder */}
-          <TouchableOpacity className="h-48 w-full bg-card rounded-3xl border-2 border-dashed border-border items-center justify-center mb-8">
-            <View className="h-14 w-14 bg-background rounded-full items-center justify-center mb-2 shadow-sm border border-border">
-              {/* Keeping hex here since Vector Icons require specific color codes */}
-              <Feather name="camera" size={24} color="#f97316" /> 
-            </View>
-            <Text className="text-base font-sans-bold text-primary">Tap to Add Photos</Text>
-            <Text className="text-sm font-sans-medium text-muted-foreground mt-1">JPEG or PNG, max 5MB</Text>
+          {/* Photo Upload Area */}
+          <TouchableOpacity
+            onPress={pickImage}
+            className="bg-card border-border mb-8 h-48 w-full items-center justify-center overflow-hidden rounded-3xl border-2 border-dashed">
+            {imageUri ? (
+              <Image source={{ uri: imageUri }} className="h-full w-full" resizeMode="cover" />
+            ) : (
+              <>
+                <View className="bg-background border-border mb-2 h-14 w-14 items-center justify-center rounded-full border shadow-sm">
+                  <Feather name="camera" size={24} color="#f97316" />
+                </View>
+                <Text className="font-sans-bold text-primary text-base">Tap to Add Photos</Text>
+                <Text className="font-sans-medium text-muted-foreground mt-1 text-sm">
+                  JPEG or PNG, max 5MB
+                </Text>
+              </>
+            )}
           </TouchableOpacity>
 
           {/* Category Picker */}
           <View className="mb-8">
-            <Text className="text-sm font-sans-semibold text-primary mb-3">Material Category</Text>
+            <Text className="font-sans-semibold text-primary mb-3 text-sm">Material Category</Text>
             <View className="flex-row gap-3">
               {['METAL', 'WOOD', 'TEXTILE'].map((cat) => (
                 <TouchableOpacity
                   key={cat}
                   onPress={() => setCategory(cat)}
-                  className={`flex-1 items-center py-3 rounded-xl border-2 ${
+                  className={`flex-1 items-center rounded-xl border-2 py-3 ${
                     category === cat ? 'border-accent bg-accent/10' : 'border-border bg-card'
                   }`}>
-                  <Text className={`font-sans-bold text-xs ${category === cat ? 'text-accent' : 'text-muted-foreground'}`}>
+                  <Text
+                    className={`font-sans-bold text-xs ${category === cat ? 'text-accent' : 'text-muted-foreground'}`}>
                     {cat}
                   </Text>
                 </TouchableOpacity>
@@ -68,11 +173,39 @@ export default function CreateListing() {
           </View>
 
           {/* Details Form */}
-          <View className="gap-5 mb-10">
+          <View className="mb-10 gap-5">
+            {/* Title Input */}
             <View className="gap-2">
-              <Text className="text-sm font-sans-semibold text-primary">Weight (kg)</Text>
+              <Text className="font-sans-semibold text-primary text-sm">Listing Title *</Text>
               <TextInput
-                className="rounded-xl border border-border bg-card px-4 py-3 text-base font-sans-medium text-primary"
+                value={title}
+                onChangeText={setTitle}
+                className="border-border bg-card font-sans-medium text-primary rounded-xl border px-4 py-3 text-base"
+                placeholder="e.g., Heavy Duty Copper Wire"
+                placeholderTextColor="#64748b"
+              />
+            </View>
+
+            {/* Description Input */}
+            <View className="gap-2">
+              <Text className="font-sans-semibold text-primary text-sm">Description</Text>
+              <TextInput
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                numberOfLines={3}
+                className="border-border bg-card font-sans-medium text-primary text-top h-24 rounded-xl border px-4 py-3 text-base"
+                placeholder="Describe the condition..."
+                placeholderTextColor="#64748b"
+              />
+            </View>
+
+            <View className="gap-2">
+              <Text className="font-sans-semibold text-primary text-sm">Weight (kg) *</Text>
+              <TextInput
+                value={weight}
+                onChangeText={setWeight}
+                className="border-border bg-card font-sans-medium text-primary rounded-xl border px-4 py-3 text-base"
                 placeholder="e.g., 50"
                 placeholderTextColor="#64748b"
                 keyboardType="numeric"
@@ -80,18 +213,22 @@ export default function CreateListing() {
             </View>
 
             <View className="gap-2">
-              <Text className="text-sm font-sans-semibold text-primary">Dimensions & Specs</Text>
+              <Text className="font-sans-semibold text-primary text-sm">Dimensions & Specs</Text>
               <TextInput
-                className="rounded-xl border border-border bg-card px-4 py-3 text-base font-sans-medium text-primary"
+                value={dimensions}
+                onChangeText={setDimensions}
+                className="border-border bg-card font-sans-medium text-primary rounded-xl border px-4 py-3 text-base"
                 placeholder="e.g., 2m x 1m, 5mm thickness"
                 placeholderTextColor="#64748b"
               />
             </View>
 
             <View className="gap-2">
-              <Text className="text-sm font-sans-semibold text-primary">Asking Price (GHS)</Text>
+              <Text className="font-sans-semibold text-primary text-sm">Asking Price (GHS) *</Text>
               <TextInput
-                className="rounded-xl border border-border bg-card px-4 py-3 text-base font-sans-medium text-primary"
+                value={price}
+                onChangeText={setPrice}
+                className="border-border bg-card font-sans-medium text-primary rounded-xl border px-4 py-3 text-base"
                 placeholder="e.g., 250"
                 placeholderTextColor="#64748b"
                 keyboardType="numeric"
@@ -100,10 +237,15 @@ export default function CreateListing() {
           </View>
 
           {/* Publish Button */}
-          <TouchableOpacity className="w-full items-center rounded-xl bg-accent py-4 shadow-sm mb-6">
-            <Text className="text-base font-sans-bold text-white">Publish Listing</Text>
+          <TouchableOpacity
+            onPress={handleSubmit}
+            disabled={isLoading}
+            className={`mb-6 w-full flex-row items-center justify-center rounded-xl py-4 shadow-sm ${isLoading ? 'bg-accent/70' : 'bg-accent'}`}>
+            {isLoading && <ActivityIndicator color="#ffffff" className="mr-2" />}
+            <Text className="font-sans-bold text-base text-white">
+              {isLoading ? 'Publishing...' : 'Publish Listing'}
+            </Text>
           </TouchableOpacity>
-
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
