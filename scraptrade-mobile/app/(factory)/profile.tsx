@@ -3,50 +3,38 @@ import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, Link } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage'; // <-- Imported AsyncStorage
 import { useAuthStore } from '@/store/authStore';
 
 export default function FactoryProfile() {
   const router = useRouter();
   const logout = useAuthStore((state) => state.logout);
+  const companyName = useAuthStore((state) => state.companyName);
 
-  // Mock Factory Data
   const user = {
-    name: "Tema Steel Works",
-    role: "Factory (Seller)",
-    phone: "024 987 6543",
-    memberSince: "Jan 2022"
+    name: companyName || 'Factory User',
+    role: 'Factory (Seller)',
+    phone: '024 987 6543',
+    memberSince: 'Jan 2022',
   };
 
-  const THEME_PRIMARY = "#0b1f1a";
+  const THEME_PRIMARY = '#0b1f1a';
 
   const handleLogout = () => {
-    Alert.alert(
-      "Sign Out",
-      "Are you sure you want to log out of SCRAPTRADE?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Sign Out", 
-          style: "destructive", 
-          onPress: async () => {
-            try {
-              // 1. Clear global state (your existing Zustand logic)
-              logout(); 
-              
-              // 2. Shred the VIP token from the phone's secure memory
-              await AsyncStorage.removeItem('token'); 
-              
-              // 3. Immediately redirect them to the Auth stack
-              router.replace('/(auth)/sign-in');
-              
-            } catch (error) {
-              console.error("Error during logout:", error);
-            }
-          } 
-        }
-      ]
-    );
+    Alert.alert('Sign Out', 'Are you sure you want to log out of SCRAPTRADE?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await logout();
+            router.replace('/(auth)/sign-in');
+          } catch (error) {
+            console.error('Error during logout:', error);
+          }
+        },
+      },
+    ]);
   };
 
   const renderMenuItem = (icon: any, title: string, subtitle?: string, href?: string) => {

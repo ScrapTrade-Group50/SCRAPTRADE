@@ -62,9 +62,10 @@ export default function CreateListing() {
 
     try {
       // Phase 1: Create the database record (hardcoded sellerId=1 for testing)
-      const listingResponse = await apiClient.post('/listings?sellerId=1', {
+      const listingResponse = await apiClient.post('/listings', {
         title: title,
         description: description,
+        category: category,
         weight: parseFloat(weight),
         dimensions: dimensions,
         pricePerUnit: parseFloat(price),

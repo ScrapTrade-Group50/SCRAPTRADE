@@ -5,35 +5,47 @@ import com.scraptrade.scraptrade_backend.repository.UserRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Configuration
 public class DataSeeder {
 
     @Bean
-    CommandLineRunner initDatabase(UserRepository userRepository) {
+    CommandLineRunner initDatabase(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         return args -> {
-            // Only create the user if the database is completely empty
-            if (userRepository.count() == 0) {
-                // 1. Create the Factory Seller
-                User factoryUser = new User();
-                factoryUser.setCompanyName("Kumasi Steel Works");
-                factoryUser.setEmail("factory@test.com");
-                factoryUser.setPhoneNumber("0241234567");
-                factoryUser.setPasswordHash("hashed_password_123"); 
-                factoryUser.setRole(User.Role.FACTORY_SELLER);
-                userRepository.save(factoryUser);
-                System.out.println("🤖 TEST FACTORY CREATED: ID 1");
+            seedUser(userRepository, passwordEncoder,
+                    "factory@test.com", "Kumasi Steel Works", "0241234567",
+                    "hashed_password_123", User.Role.FACTORY_SELLER);
 
-                // 2. Create the Artisan Buyer
-                User artisanUser = new User();
-                artisanUser.setCompanyName("Suame Welders Hub");
-                artisanUser.setEmail("artisan@test.com");
-                artisanUser.setPhoneNumber("0249876543");
-                artisanUser.setPasswordHash("hashed_password_456");
-                artisanUser.setRole(User.Role.ARTISAN_BUYER);
-                userRepository.save(artisanUser);
-                System.out.println("🤖 TEST ARTISAN CREATED: ID 2");
-            }
+            seedUser(userRepository, passwordEncoder,
+                    "artisan@test.com", "Suame Welders Hub", "0249876543",
+                    "hashed_password_456", User.Role.ARTISAN_BUYER);
         };
+    }
+
+    private void seedUser(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            String email,
+            String companyName,
+            String phone,
+            String rawPassword,
+            User.Role role) {
+
+        User existing = userRepository.findByEmail(email);
+        if (existing == null) {
+            User user = new User();
+            user.setEmail(email);
+            user.setCompanyName(companyName);
+            user.setPhoneNumber(phone);
+            user.setPasswordHash(passwordEncoder.encode(rawPassword));
+            user.setRole(role);
+            userRepository.save(user);
+            System.out.println("TEST USER CREATED: " + email);
+        } else if (!existing.getPasswordHash().startsWith("$2a$")) {
+            existing.setPasswordHash(passwordEncoder.encode(rawPassword));
+            userRepository.save(existing);
+            System.out.println("TEST USER PASSWORD RE-HASHED: " + email);
+        }
     }
 }

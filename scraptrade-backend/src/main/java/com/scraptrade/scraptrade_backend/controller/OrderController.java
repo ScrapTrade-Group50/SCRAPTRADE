@@ -6,8 +6,15 @@ import com.scraptrade.scraptrade_backend.model.User;
 import com.scraptrade.scraptrade_backend.repository.ListingRepository;
 import com.scraptrade.scraptrade_backend.repository.OrderRepository;
 import com.scraptrade.scraptrade_backend.repository.UserRepository;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -24,61 +31,98 @@ public class OrderController {
         this.userRepository = userRepository;
     }
 
-    // URL: POST http://localhost:8080/api/orders/checkout?buyerId=2&listingId=1
-    @PostMapping("/checkout")
-    public Order processCheckout(@RequestParam Long buyerId, @RequestParam Long listingId) {
-        
-        // 1. Find the buyer and the listing
-        User buyer = userRepository.findById(buyerId)
-                .orElseThrow(() -> new RuntimeException("Buyer not found!"));
-        Listing listing = listingRepository.findById(listingId)
-                .orElseThrow(() -> new RuntimeException("Listing not found!"));
+    private User requireUser(Authentication authentication) {
+        User user = userRepository.findByEmail(authentication.getName());
+        if (user == null) {
+            throw new IllegalArgumentException("User not found!");
+        }
+        return user;
+    }
 
-        // 2. Create the new Escrow Order
+    @PostMapping("/checkout")
+    @Transactional
+    public Order processCheckout(
+            @RequestParam Long listingId,
+            @RequestParam(required = false) String momoNumber,
+            Authentication authentication) {
+
+        User buyer = requireUser(authentication);
+
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new IllegalArgumentException("Listing not found!"));
+
+        if (!listing.getStatus().equals(Listing.Status.AVAILABLE)) {
+            throw new IllegalStateException("Sorry, this item was just sold!");
+        }
+
+        BigDecimal price = listing.getPricePerUnit() != null ? listing.getPricePerUnit() : BigDecimal.ZERO;
+        Double weight = listing.getWeight() != null ? listing.getWeight() : 0.0;
+        BigDecimal itemTotal = price.multiply(BigDecimal.valueOf(weight));
+        BigDecimal total = itemTotal.add(Order.ESCROW_FEE);
+
         Order newOrder = new Order();
         newOrder.setBuyer(buyer);
         newOrder.setListing(listing);
-        newOrder.setTotalAmount(listing.getPricePerUnit()); // Grabbing the price from the listing
+        newOrder.setTotalAmount(total);
+        newOrder.setMomoNumber(momoNumber);
         newOrder.setStatus(Order.Status.PAID_TO_ESCROW);
-        
-        // Generate a random 8-character Gate Pass code!
         newOrder.setGatePassCode("QR-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
 
-        // 3. Update the listing so no one else can buy it
         listing.setStatus(Listing.Status.PENDING_PICKUP);
         listingRepository.save(listing);
 
-        // 4. Save and return the order
         return orderRepository.save(newOrder);
     }
 
-    // THE NEW VERIFY-PICKUP ENDPOINT
-    // URL: POST http://localhost:8080/api/orders/verify-pickup?gatePassCode=QR-XXXXX
     @PostMapping("/verify-pickup")
-    public Order verifyPickup(@RequestParam String gatePassCode) {
-        
-        // 1. Find the order using the QR code
-        Order order = orderRepository.findByGatePassCode(gatePassCode);
-        
-        // Security check: Does the code exist?
-        if (order == null) {
-            throw new RuntimeException("Invalid Gate Pass Code! Access Denied.");
-        }
-        
-        // Security check: Has it already been picked up?
-        if (order.getStatus() != Order.Status.PAID_TO_ESCROW) {
-            throw new RuntimeException("This order has already been processed.");
+    @Transactional
+    public ResponseEntity<?> verifyPickup(@RequestParam String gatePassCode, Authentication authentication) {
+
+        User factoryUser = requireUser(authentication);
+
+        if (factoryUser.getRole() != User.Role.FACTORY_SELLER) {
+            throw new SecurityException("Only factory sellers can verify gate passes.");
         }
 
-        // 2. Mark the Order as Completed (This would trigger the MoMo payout in real life)
+        Order order = orderRepository.findByGatePassCode(gatePassCode);
+
+        if (order == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Invalid Gate Pass Code! Please check your typing."));
+        }
+
+        if (!order.getListing().getSeller().getId().equals(factoryUser.getId())) {
+            throw new SecurityException("You can only verify pickups for your own listings.");
+        }
+
+        if (order.getStatus() != Order.Status.PAID_TO_ESCROW) {
+            return ResponseEntity.badRequest().body(Map.of("message", "This order has already been processed and picked up."));
+        }
+
         order.setStatus(Order.Status.COMPLETED);
-        
-        // 3. Update the associated Listing to show it's officially gone
+
         Listing listing = order.getListing();
         listing.setStatus(Listing.Status.SOLD);
         listingRepository.save(listing);
 
-        // 4. Save and return the updated order
-        return orderRepository.save(order);
+        orderRepository.save(order);
+
+        return ResponseEntity.ok(Map.of("message", "Verification successful! Funds released."));
+    }
+
+    @GetMapping("/my-orders")
+    public ResponseEntity<List<Order>> getMyOrders(Authentication authentication) {
+        User buyer = requireUser(authentication);
+        return ResponseEntity.ok(orderRepository.findByBuyer(buyer));
+    }
+
+    @GetMapping("/my-sales")
+    public ResponseEntity<List<Order>> getMySales(Authentication authentication) {
+        User seller = requireUser(authentication);
+
+        if (seller.getRole() != User.Role.FACTORY_SELLER) {
+            throw new SecurityException("Only factory sellers can view sales history.");
+        }
+
+        return ResponseEntity.ok(orderRepository.findByListingSeller(seller));
     }
 }

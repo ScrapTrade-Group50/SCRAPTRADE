@@ -1,10 +1,14 @@
 package com.scraptrade.scraptrade_backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import jakarta.persistence.*;
 import lombok.Data;
 import java.math.BigDecimal;
 
 @Data
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 @Entity
 @Table(name = "listings")
 public class Listing {
@@ -21,6 +25,9 @@ public class Listing {
     
     @Column(columnDefinition = "TEXT")
     private String description;
+
+    // --- NEW: Added the category field ---
+    private String category; 
 
     private Double weight; 
     

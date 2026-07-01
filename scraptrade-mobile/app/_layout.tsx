@@ -5,29 +5,30 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 
 export default function Layout() {
-  const { isAuthenticated, role } = useAuthStore();
+  const { isAuthenticated, isHydrated, role, hydrate } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
 
   useEffect(() => {
-    if (!rootNavigationState?.key) return;
+    hydrate();
+  }, [hydrate]);
 
-    // THE FIX: Expo Router sees the folder name '(auth)' as the first segment!
+  useEffect(() => {
+    if (!isHydrated || !rootNavigationState?.key) return;
+
     const inAuthGroup = segments[0] === '(auth)';
 
-    setTimeout(() => {
-      if (!isAuthenticated && !inAuthGroup) {
-        router.replace('/(auth)/sign-in'); // Explicitly routing to the auth folder
-      } else if (isAuthenticated && inAuthGroup) {
-        if (role === 'factory') {
-          router.replace('/(factory)/dashboard');
-        } else if (role === 'artisan') {
-          router.replace('/(artisan)/feed');
-        }
+    if (!isAuthenticated && !inAuthGroup) {
+      router.replace('/(auth)/sign-in');
+    } else if (isAuthenticated && inAuthGroup) {
+      if (role === 'factory') {
+        router.replace('/(factory)/dashboard');
+      } else if (role === 'artisan') {
+        router.replace('/(artisan)/feed');
       }
-    }, 0);
-  }, [isAuthenticated, role, segments, rootNavigationState?.key]);
+    }
+  }, [isAuthenticated, isHydrated, role, segments, rootNavigationState?.key, router]);
 
   return (
     <SafeAreaProvider>

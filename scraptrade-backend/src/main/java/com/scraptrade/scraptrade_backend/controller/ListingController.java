@@ -4,9 +4,10 @@ import com.scraptrade.scraptrade_backend.model.Listing;
 import com.scraptrade.scraptrade_backend.model.User;
 import com.scraptrade.scraptrade_backend.repository.ListingRepository;
 import com.scraptrade.scraptrade_backend.repository.UserRepository;
-import com.scraptrade.scraptrade_backend.service.FileUploadService; // 1. The new service import
+import com.scraptrade.scraptrade_backend.service.FileUploadService;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile; // 2. Required for handling the image file
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -16,13 +17,20 @@ public class ListingController {
 
     private final ListingRepository listingRepository;
     private final UserRepository userRepository;
-    private final FileUploadService fileUploadService; // 3. Clean and simple
+    private final FileUploadService fileUploadService;
 
-    // 4. The Constructor (Notice the "this." keywords!)
     public ListingController(ListingRepository listingRepository, UserRepository userRepository, FileUploadService fileUploadService) {
         this.listingRepository = listingRepository;
         this.userRepository = userRepository;
-        this.fileUploadService = fileUploadService; 
+        this.fileUploadService = fileUploadService;
+    }
+
+    private User requireUser(Authentication authentication) {
+        User user = userRepository.findByEmail(authentication.getName());
+        if (user == null) {
+            throw new IllegalArgumentException("User not found!");
+        }
+        return user;
     }
 
     @GetMapping("/test")
@@ -35,52 +43,71 @@ public class ListingController {
         return listingRepository.findByStatus(Listing.Status.AVAILABLE);
     }
 
+    @GetMapping("/mine")
+    public List<Listing> getMyListings(Authentication authentication) {
+        User seller = requireUser(authentication);
+        if (seller.getRole() != User.Role.FACTORY_SELLER) {
+            throw new SecurityException("Only factory sellers can view their inventory.");
+        }
+        return listingRepository.findBySeller(seller);
+    }
+
     @GetMapping("/search")
     public List<Listing> searchListings(@RequestParam String keyword) {
         return listingRepository.findByTitleContainingIgnoreCaseAndStatus(keyword, Listing.Status.AVAILABLE);
     }
 
     @PostMapping
-    public Listing createListing(@RequestBody Listing newListing, @RequestParam Long sellerId) {
-        User seller = userRepository.findById(sellerId)
-                .orElseThrow(() -> new RuntimeException("Seller not found!"));
-        
+    public Listing createListing(@RequestBody Listing newListing, Authentication authentication) {
+        User seller = requireUser(authentication);
+
+        if (seller.getRole() != User.Role.FACTORY_SELLER) {
+            throw new SecurityException("Only factory sellers can create listings.");
+        }
+
         newListing.setSeller(seller);
         newListing.setStatus(Listing.Status.AVAILABLE);
-        
+
         return listingRepository.save(newListing);
     }
 
-    // THE NEW IMAGE UPLOAD ENDPOINT
-    // URL: POST http://localhost:8080/api/listings/1/image
     @PostMapping("/{id}/image")
-    public Listing uploadListingImage(@PathVariable Long id, @RequestParam("file") MultipartFile file) throws Exception {
-        
+    public Listing uploadListingImage(@PathVariable Long id, @RequestParam("file") MultipartFile file, Authentication authentication) throws Exception {
+        User seller = requireUser(authentication);
+
         Listing listing = listingRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Listing not found!"));
+                .orElseThrow(() -> new IllegalArgumentException("Listing not found!"));
+
+        if (!listing.getSeller().getId().equals(seller.getId())) {
+            throw new SecurityException("You can only upload images for your own listings.");
+        }
 
         String cloudUrl = fileUploadService.uploadImage(file);
-
         listing.setImageUrl(cloudUrl);
         return listingRepository.save(listing);
     }
 
-    // THE NEW DELETE ENDPOINT
-    // URL: DELETE http://localhost:8080/api/listings/{id}
     @DeleteMapping("/{id}")
-    public void deleteListing(@PathVariable Long id) {
-        // Find it, and if it exists, delete it!
+    public void deleteListing(@PathVariable Long id, Authentication authentication) {
+        User seller = requireUser(authentication);
+
         Listing listing = listingRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Listing not found!"));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Listing not found!"));
+
+        if (!listing.getSeller().getId().equals(seller.getId())) {
+            throw new SecurityException("You can only delete your own listings.");
+        }
+
+        if (listing.getStatus() != Listing.Status.AVAILABLE) {
+            throw new IllegalStateException("Cannot delete a listing that has an active order.");
+        }
+
         listingRepository.delete(listing);
     }
 
-    // THE NEW SINGLE ITEM ENDPOINT
-    // URL: GET http://localhost:8080/api/listings/{id}
     @GetMapping("/{id}")
     public Listing getListingById(@PathVariable Long id) {
         return listingRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Listing not found!"));
+                .orElseThrow(() -> new IllegalArgumentException("Listing not found!"));
     }
 }

@@ -7,7 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -19,20 +19,18 @@ export default function ForgotPassword() {
 
   const handleReset = () => {
     if (!email) {
-      Alert.alert("Error", "Please enter your email address.");
+      Alert.alert('Error', 'Please enter your email address.');
       return;
     }
     Alert.alert(
-      "Link Sent!",
-      "If an account exists with that email, you will receive password reset instructions shortly.",
-      [{ text: "Back to Login", onPress: () => router.back() }]
+      'Link Sent!',
+      'If an account exists with that email, you will receive password reset instructions shortly.',
+      [{ text: 'Back to Login', onPress: () => router.back() }]
     );
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-slate-50" style={{ flex: 1 }} edges={['top']}>
-      
-      {/* Header */}
+    <SafeAreaView className="flex-1 bg-background" style={{ flex: 1 }} edges={['top']}>
       <View className="px-6 py-4 flex-row items-center">
         <TouchableOpacity onPress={() => router.back()} className="mr-4 p-1">
           <Feather name="arrow-left" size={24} color="#0f172a" />
@@ -48,26 +46,24 @@ export default function ForgotPassword() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
 
-          {/* Icon & Title */}
           <View className="items-center mb-8">
-            <View className="h-20 w-20 bg-orange-100 rounded-full items-center justify-center mb-6">
-              <Feather name="lock" size={32} color="#ea580c" />
+            <View className="h-20 w-20 bg-accent/10 rounded-full items-center justify-center mb-6">
+              <Feather name="lock" size={32} color="#ea7a53" />
             </View>
-            <Text className="text-3xl font-extrabold text-slate-900 text-center mb-2">
+            <Text className="text-3xl font-sans-extrabold text-primary text-center mb-2">
               Reset Password
             </Text>
-            <Text className="text-base font-medium text-slate-500 text-center px-4">
-              Enter the email address associated with your account and we'll send you a link to reset your password.
+            <Text className="text-base font-sans-medium text-muted-foreground text-center px-4">
+              Enter the email address associated with your account and we will send you a link to reset your password.
             </Text>
           </View>
 
-          {/* Email Input */}
           <View className="gap-2 mb-8">
-            <Text className="text-sm font-semibold text-slate-900">Email Address</Text>
-            <View className="flex-row items-center border border-slate-300 bg-white rounded-xl px-4 h-14">
+            <Text className="text-sm font-sans-semibold text-primary">Email Address</Text>
+            <View className="flex-row items-center border border-border bg-card rounded-xl px-4 h-14">
               <Feather name="mail" size={20} color="#64748b" />
               <TextInput
-                className="flex-1 ml-3 text-base font-medium text-slate-900 h-full"
+                className="flex-1 ml-3 text-base font-sans-medium text-primary h-full"
                 placeholder="e.g. factory@example.com"
                 placeholderTextColor="#64748b"
                 keyboardType="email-address"
@@ -78,14 +74,11 @@ export default function ForgotPassword() {
             </View>
           </View>
 
-          {/* Submit Button */}
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={handleReset}
-            className="w-full items-center rounded-xl bg-orange-500 py-4 shadow-sm"
-          >
-            <Text className="text-base font-bold text-white">Send Reset Link</Text>
+            className="w-full items-center rounded-xl bg-accent py-4 shadow-sm">
+            <Text className="text-base font-sans-bold text-white">Send Reset Link</Text>
           </TouchableOpacity>
-
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

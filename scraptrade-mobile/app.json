@@ -37,6 +37,9 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       }
+    },
+    "extra": {
+      "apiUrl": "http://localhost:8080/api"
     }
   }
 }
