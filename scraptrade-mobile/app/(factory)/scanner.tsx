@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'; // <-- Added useRef
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -14,26 +14,34 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useIsFocused } from '@react-navigation/native'; // <-- NEW: Detects if screen is active
+import { useIsFocused } from '@react-navigation/native';
 import { apiClient } from '../../api/client';
 
 export default function QRScanner() {
   const router = useRouter();
-  const isFocused = useIsFocused(); // Returns true ONLY if the user is actively looking at this screen
+  const isFocused = useIsFocused(); 
   const [permission, requestPermission] = useCameraPermissions();
   
-  // State Engine
   const [scanned, setScanned] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [manualMode, setManualMode] = useState(false);
   const [manualCode, setManualCode] = useState('');
 
-  // The Hardware Lock: A synchronous gatekeeper to prevent the 30FPS rapid-fire bug
   const isProcessingRef = useRef(false); 
 
   const THEME_ACCENT = "#6366f1";
 
-  // --- THE LOGIC ENGINE ---
+  // --- THE AUTO-RESET FIX ---
+  // Every time the user navigates TO this screen, completely unlock the scanner
+  useEffect(() => {
+    if (isFocused) {
+      isProcessingRef.current = false;
+      setScanned(false);
+      setIsProcessing(false);
+      setManualCode('');
+    }
+  }, [isFocused]);
+
   const processGatePass = async (code: string) => {
     if (!code) return;
     
@@ -43,20 +51,25 @@ export default function QRScanner() {
     try {
       const response = await apiClient.post(`/orders/verify-pickup?gatePassCode=${code}`);
       
+      // FIX 1: Turn off the "Verifying..." UI immediately after success
+      setIsProcessing(false);
+      
       Alert.alert(
         "Verification Successful! 🎉", 
         "The funds have been released from Escrow to your account.",
         [{ 
           text: "Back to Dashboard", 
           onPress: () => {
-            // Reset the hardware lock before navigating away
             isProcessingRef.current = false;
             router.replace('/(factory)/dashboard');
           } 
-        }]
+        }],
+        { cancelable: false } // FIX 2: Prevents tapping outside the alert to bypass the unlock!
       );
     } catch (error: any) {
       console.error('Verification failed:', error);
+      
+      // Turn off the "Verifying..." UI
       setIsProcessing(false);
       
       Alert.alert(
@@ -70,18 +83,16 @@ export default function QRScanner() {
             setScanned(false);
             setManualCode('');
           } 
-        }]
+        }],
+        { cancelable: false } // Prevents bypass
       );
     }
   };
 
   const handleBarcodeScanned = ({ type, data }: { type: string; data: string }) => {
-    // 1. Sync Check: If the gate is locked, completely ignore this frame
     if (isProcessingRef.current || scanned) return; 
     
-    // 2. Lock the gate immediately so the next frame at 30FPS bounces off
     isProcessingRef.current = true;
-    
     processGatePass(data);
   };
 
@@ -114,17 +125,15 @@ export default function QRScanner() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: '#000' }}>
       
-      {/* FULL SCREEN CAMERA (Only renders if the user is actually on this screen!) */}
       {isFocused && (
         <CameraView 
           style={StyleSheet.absoluteFillObject}
           facing="back"
-          onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+          onBarcodeScanned={handleBarcodeScanned} // FIX: Removed the dynamic undefined logic
           barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
         />
       )}
 
-      {/* YOUR CUSTOM OVERLAY MASK */}
       <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
         <View className="flex-1 bg-black/60 w-full" />
         <View className="flex-row">
@@ -140,10 +149,8 @@ export default function QRScanner() {
         <View className="flex-1 bg-black/60 w-full" />
       </View>
 
-      {/* UI ELEMENTS ON TOP */}
       <SafeAreaView style={StyleSheet.absoluteFillObject} edges={['top', 'bottom']} pointerEvents="box-none">
         
-        {/* Header: Back Button & Processing Indicator */}
         <View className="px-6 py-4 flex-row items-center justify-between" pointerEvents="box-none">
           <TouchableOpacity 
             onPress={() => router.back()} 
@@ -160,10 +167,8 @@ export default function QRScanner() {
           )}
         </View>
 
-        {/* Spacer to push the bottom sheet down */}
         <View style={{ flex: 1 }} pointerEvents="none" />
 
-        {/* Bottom Section: Instructions or Manual Entry */}
         <View className="px-6 pb-6 pt-6" pointerEvents="box-none">
           {manualMode ? (
             <View className="bg-card rounded-3xl p-6 shadow-2xl">

@@ -46,6 +46,21 @@ export default function ArtisanTabLayout() {
         }}
       />
 
+
+      {/* --- RESTORED TRANSACTIONS TAB --- */}
+      <Tabs.Screen
+        name="transactions"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <View className="tabs-icon">
+              <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
+                <Feather name="file-text" size={24} color={focused ? THEME_ACCENT : THEME_MUTED} />
+              </View>
+            </View>
+          ),
+        }}
+      />
+
       <Tabs.Screen
         name="profile"
         options={{
@@ -59,10 +74,11 @@ export default function ArtisanTabLayout() {
         }}
       />
 
+      {/* HIDDEN SCREENS */}
       <Tabs.Screen name="listing-detail" options={{ href: null }} />
       <Tabs.Screen name="checkout" options={{ href: null }} />
-      <Tabs.Screen name="gate-pass" options={{ href: null }} />
       <Tabs.Screen name="momo-details" options={{ href: null }} />
+      <Tabs.Screen name="gate-pass" options={{ href: null }} />
       <Tabs.Screen name="personal-info" options={{ href: null }} />
     </Tabs>
   );

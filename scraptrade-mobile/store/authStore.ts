@@ -39,8 +39,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   hydrate: async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
+      
+      // If there's no token, just exit the try block early
       if (!token) {
-        set({ isHydrated: true });
         return;
       }
 
@@ -55,10 +56,15 @@ export const useAuthStore = create<AuthState>((set) => ({
         ['companyName', companyName],
       ]);
 
-      set({ isAuthenticated: true, role, userId, companyName, isHydrated: true });
+      set({ isAuthenticated: true, role, userId, companyName });
     } catch {
+      // If the server is blocked by the firewall or the token is expired, clean up
       await AsyncStorage.multiRemove(['userToken', 'userRole', 'userId', 'companyName']);
-      set({ isAuthenticated: false, role: null, userId: null, companyName: null, isHydrated: true });
+      set({ isAuthenticated: false, role: null, userId: null, companyName: null });
+    } finally {
+      // THIS IS THE LIFESAVER: 
+      // It tells _layout.tsx that we are done checking, unblocking the app!
+      set({ isHydrated: true });
     }
   },
 }));

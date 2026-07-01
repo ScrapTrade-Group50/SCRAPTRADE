@@ -107,6 +107,8 @@ export default function FactoryDashboard() {
 
     return (
       <View className="bg-card border-border mb-4 flex-row items-center rounded-2xl border p-3 shadow-sm">
+        
+        {/* Left: Image */}
         {item.imageUrl ? (
           <Image
             source={{ uri: item.imageUrl }}
@@ -119,6 +121,7 @@ export default function FactoryDashboard() {
           </View>
         )}
 
+        {/* Middle: Info */}
         <View className="ml-4 flex-1 justify-center">
           <Text className="font-sans-bold text-muted-foreground mb-1 text-xs">
             {displayCategory} • {item.weight} kg
@@ -131,7 +134,9 @@ export default function FactoryDashboard() {
           </Text>
         </View>
 
-        <View className="items-end justify-between py-1 ml-2 h-full">
+        {/* Right: Badge & Action (FIXED STRETCHING BUG) */}
+        <View className="items-end ml-2">
+          
           <View className={`rounded-lg px-2 py-1 mb-2 ${bg}`}>
             <Text className={`font-sans-bold text-[10px] tracking-wider uppercase ${text}`}>
               {label}
@@ -142,14 +147,15 @@ export default function FactoryDashboard() {
           {item.status === 'AVAILABLE' ? (
             <TouchableOpacity 
               onPress={() => handleDelete(item.id)} 
-              className="p-2 rounded-md bg-red-50"
+              className="p-1.5 rounded-md bg-red-50 mt-1"
             >
               <Feather name="trash-2" size={16} color="#ef4444" />
             </TouchableOpacity>
           ) : (
-             <View className="p-2" /> // Empty spacer to keep alignment
+             <View className="h-8" /> // Invisible spacer to keep layout aligned
           )}
         </View>
+        
       </View>
     );
   };
