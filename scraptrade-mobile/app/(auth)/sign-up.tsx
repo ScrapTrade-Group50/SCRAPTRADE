@@ -15,6 +15,7 @@ import { Link, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../../store/authStore';
 import { apiClient, mapBackendRole } from '@/api/client';
+import { ROUTES } from '@/utils/routes';
 
 export default function SignUp() {
   const router = useRouter();
@@ -47,9 +48,9 @@ export default function SignUp() {
       await login(mappedRole, response.data.userId, response.data.companyName);
 
       if (mappedRole === 'factory') {
-        router.replace('/(factory)/dashboard');
+        router.replace(ROUTES.factoryDashboard);
       } else {
-        router.replace('/(artisan)/feed');
+        router.replace(ROUTES.artisanFeed);
       }
     } catch (error: any) {
       Alert.alert('Registration Failed', error.response?.data?.message || 'Could not create account.');

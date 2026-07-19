@@ -1,74 +1,21 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
-import { View } from 'react-native';
+import { Stack } from 'expo-router';
 
-export default function FactoryTabLayout() {
-  // Extracting your theme colors for the icons
-  const THEME_ACCENT = '#6366f1'; // Your indigo active color
-  const THEME_MUTED = '#6b7280'; // Your muted gray inactive color
-
+/**
+ * The factory area is a Stack so that detail screens (create/edit listing,
+ * company details, warehouses) push on top of the tab bar. This restores the
+ * native back button + iOS swipe-back gesture and hides the tab bar on those
+ * focused flows — behaviour that a bare Tabs navigator cannot provide.
+ */
+export default function FactoryStackLayout() {
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false, // We hide the default headers since you built custom ones
-        tabBarShowLabel: false, // Hiding text labels for that premium, clean look
-        tabBarStyle: {
-          backgroundColor: '#ffffff',
-          borderTopWidth: 1,
-          borderTopColor: '#d1d5db',
-          height: 85, // Tall enough to handle the safe area on iPhones
-          paddingTop: 10,
-        },
-      }}>
-      {/* 1. Dashboard Tab */}
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <View className="tabs-icon">
-              <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
-                <Feather name="grid" size={24} color={focused ? THEME_ACCENT : THEME_MUTED} />
-              </View>
-            </View>
-          ),
-        }}
-      />
-
-      {/* 2. QR Scanner Tab */}
-      <Tabs.Screen
-        name="scanner"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <View className="tabs-icon">
-              <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
-                <Feather name="maximize" size={24} color={focused ? THEME_ACCENT : THEME_MUTED} />
-              </View>
-            </View>
-          ),
-        }}
-      />
-
-      {/* 3. Global Profile Tab (Using href to point outside the factory folder) */}
-      <Tabs.Screen
-        name="profile"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <View className="tabs-icon">
-              <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
-                <Feather name="user" size={24} color={focused ? THEME_ACCENT : THEME_MUTED} />
-              </View>
-            </View>
-          ),
-        }}
-      />
-
-      {/* --- HIDDEN SCREENS --- */}
-      {/* We want these screens in the factory group, but NOT on the bottom tab bar */}
-      <Tabs.Screen name="create-listing" options={{ href: null }} />
-      <Tabs.Screen name="edit-listing" options={{ href: null }} />
-      <Tabs.Screen name="company-details" options={{ href: null }} />
-      <Tabs.Screen name="warehouse-locations" options={{ href: null }} />
-    </Tabs>
+    <Stack screenOptions={{ headerShown: false, gestureEnabled: true }}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="create-listing" />
+      <Stack.Screen name="edit-listing" />
+      <Stack.Screen name="company-details" />
+      <Stack.Screen name="warehouse-locations" />
+      <Stack.Screen name="payout-setup" />
+    </Stack>
   );
 }

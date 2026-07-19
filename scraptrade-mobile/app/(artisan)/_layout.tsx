@@ -1,85 +1,21 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
-import { View } from 'react-native';
+import { Stack } from 'expo-router';
 
-export default function ArtisanTabLayout() {
-  const THEME_ACCENT = '#6366f1';
-  const THEME_MUTED = '#6b7280';
-
+/**
+ * The artisan area is a Stack so that detail screens (listing detail, checkout,
+ * gate pass, profile sub-pages) push on top of the tab bar. This restores the
+ * native back button + iOS swipe-back gesture and hides the tab bar on those
+ * focused flows — behaviour that a bare Tabs navigator cannot provide.
+ */
+export default function ArtisanStackLayout() {
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarShowLabel: false,
-        tabBarStyle: {
-          backgroundColor: '#ffffff',
-          borderTopWidth: 1,
-          borderTopColor: '#d1d5db',
-          height: 85,
-          paddingTop: 10,
-        },
-      }}>
-      <Tabs.Screen
-        name="feed"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <View className="tabs-icon">
-              <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
-                <Feather name="compass" size={24} color={focused ? THEME_ACCENT : THEME_MUTED} />
-              </View>
-            </View>
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="saved"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <View className="tabs-icon">
-              <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
-                <Feather name="bookmark" size={24} color={focused ? THEME_ACCENT : THEME_MUTED} />
-              </View>
-            </View>
-          ),
-        }}
-      />
-
-
-      {/* --- RESTORED TRANSACTIONS TAB --- */}
-      <Tabs.Screen
-        name="transactions"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <View className="tabs-icon">
-              <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
-                <Feather name="file-text" size={24} color={focused ? THEME_ACCENT : THEME_MUTED} />
-              </View>
-            </View>
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="profile"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <View className="tabs-icon">
-              <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
-                <Feather name="user" size={24} color={focused ? THEME_ACCENT : THEME_MUTED} />
-              </View>
-            </View>
-          ),
-        }}
-      />
-
-      {/* HIDDEN SCREENS */}
-      <Tabs.Screen name="listing-detail" options={{ href: null }} />
-      <Tabs.Screen name="checkout" options={{ href: null }} />
-      <Tabs.Screen name="momo-details" options={{ href: null }} />
-      <Tabs.Screen name="gate-pass" options={{ href: null }} />
-      <Tabs.Screen name="personal-info" options={{ href: null }} />
-    </Tabs>
+    <Stack screenOptions={{ headerShown: false, gestureEnabled: true }}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="listing-detail" />
+      <Stack.Screen name="checkout" />
+      <Stack.Screen name="momo-details" />
+      <Stack.Screen name="gate-pass" />
+      <Stack.Screen name="personal-info" />
+    </Stack>
   );
 }

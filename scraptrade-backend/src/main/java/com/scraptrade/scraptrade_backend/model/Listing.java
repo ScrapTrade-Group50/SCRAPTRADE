@@ -33,6 +33,9 @@ public class Listing {
     
     private String dimensions;
 
+    @Column(name = "pickup_location")
+    private String pickupLocation;
+
     @Column(name = "price_per_unit")
     private BigDecimal pricePerUnit;
 

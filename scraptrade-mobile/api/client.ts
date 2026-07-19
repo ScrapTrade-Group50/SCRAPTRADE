@@ -13,8 +13,23 @@ export const apiClient = axios.create({
   timeout: 10000,
 });
 
+const PUBLIC_AUTH_PATHS = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+];
+
+function isPublicAuthRequest(url: string | undefined) {
+  if (!url) return false;
+  return PUBLIC_AUTH_PATHS.some((path) => url.includes(path));
+}
+
 apiClient.interceptors.request.use(
   async (config) => {
+    if (isPublicAuthRequest(config.url)) {
+      return config;
+    }
     const token = await AsyncStorage.getItem('userToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -24,14 +39,46 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+async function clearAuthSession() {
+  await AsyncStorage.multiRemove([
+    'userToken',
+    'userRole',
+    'userId',
+    'companyName',
+    'phoneNumber',
+    'email',
+  ]);
+  // Lazy import avoids circular dependency with authStore → apiClient
+  const { useAuthStore } = await import('../store/authStore');
+  useAuthStore.setState({
+    isAuthenticated: false,
+    role: null,
+    userId: null,
+    companyName: null,
+    phoneNumber: null,
+    email: null,
+  });
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      const url = error.config?.url as string | undefined;
-      if (url && !url.includes('/auth/login') && !url.includes('/auth/register')) {
-        await AsyncStorage.multiRemove(['userToken', 'userRole', 'userId', 'companyName']);
-      }
+    const status = error.response?.status;
+    const url = error.config?.url as string | undefined;
+    const hasBusinessMessage = Boolean(error.response?.data?.message);
+
+    if (!url || isPublicAuthRequest(url)) {
+      return Promise.reject(error);
+    }
+
+    // Spring's auth rejection (missing/expired token) returns a 401, or a 403 with
+    // NO "message" (shape: { timestamp, status, error, path }). Our own business-rule
+    // failures (wrong role, not your listing, etc.) come through GlobalExceptionHandler
+    // as a 403 WITH a "message" — those must NOT log the user out.
+    const isAuthFailure = status === 401 || (status === 403 && !hasBusinessMessage);
+
+    if (isAuthFailure) {
+      await clearAuthSession();
     }
     return Promise.reject(error);
   }

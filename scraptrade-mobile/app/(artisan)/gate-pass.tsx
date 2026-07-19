@@ -1,111 +1,369 @@
-import React from 'react';
-import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  ScrollView 
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  useWindowDimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
+import { apiClient } from '../../api/client';
+import { ROUTES } from '@/utils/routes';
+
+type OrderSummary = {
+  status: string;
+  gatePassCode: string;
+};
+
+type PickupPhase = 'loading' | 'awaiting' | 'completed';
+
+const POLL_MS = 3000;
 
 export default function GatePass() {
   const router = useRouter();
-  
-  // We now expect the title, weight, and amount to be passed along with the code!
-  const { code, title, weight, amount } = useLocalSearchParams(); 
+  const { width } = useWindowDimensions();
+  const { code, title, weight, amount } = useLocalSearchParams();
 
-  const qrString = (code as string) || "QR-ERROR";
-  const displayTitle = (title as string) || "Scrap Material";
-  const displayWeight = (weight as string) || "--";
-  const displayAmount = (amount as string) || "--";
+  const qrString = ((code as string) || 'QR-ERROR').trim().toUpperCase();
+  const displayTitle = (title as string) || 'Scrap Material';
+  const displayWeight = (weight as string) || '--';
+  const displayAmount = Number(amount as string);
+  const amountLabel = Number.isFinite(displayAmount) ? displayAmount.toFixed(2) : '--';
+
+  const [phase, setPhase] = useState<PickupPhase>('loading');
+
+  const qrSize = Math.min(200, Math.max(160, width - 120));
+
+  useEffect(() => {
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+
+    const syncPickupStatus = async () => {
+      try {
+        const response = await apiClient.get<OrderSummary[]>('/orders/my-orders');
+        if (cancelled) return;
+
+        const order = response.data.find(
+          (item) => item.gatePassCode?.trim().toUpperCase() === qrString
+        );
+
+        if (order?.status === 'COMPLETED') {
+          setPhase('completed');
+          if (intervalId) clearInterval(intervalId);
+        } else {
+          setPhase('awaiting');
+        }
+      } catch {
+        if (!cancelled) {
+          setPhase((current) => (current === 'completed' ? 'completed' : 'awaiting'));
+        }
+      }
+    };
+
+    syncPickupStatus();
+    intervalId = setInterval(syncPickupStatus, POLL_MS);
+
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [qrString]);
+
+  const summaryCard = (
+    <View style={styles.summaryRow}>
+      <View style={styles.summaryLeft}>
+        <Text style={styles.itemTitle} numberOfLines={1}>
+          {displayTitle}
+        </Text>
+        <Text style={styles.itemMeta}>{displayWeight} kg</Text>
+      </View>
+      <Text style={styles.itemPrice}>GHS {amountLabel}</Text>
+    </View>
+  );
+
+  if (phase === 'loading') {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={styles.loadingBody}>
+          <ActivityIndicator size="large" color="#6366f1" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (phase === 'completed') {
+    return (
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <View style={styles.screen}>
+          <View style={styles.status}>
+            <View style={styles.checkCircle}>
+              <Feather name="check" size={28} color="#ffffff" />
+            </View>
+            <Text style={styles.statusTitle}>Pickup Confirmed</Text>
+            <Text style={styles.statusSubtitle}>
+              The factory scanned your gate pass. Your order is complete.
+            </Text>
+          </View>
+
+          <View style={styles.card}>
+            <View style={styles.confirmedBadge}>
+              <Feather name="shield" size={18} color="#15803d" />
+              <Text style={styles.confirmedBadgeText}>Escrow released after pickup</Text>
+            </View>
+            <View style={styles.divider} />
+            {summaryCard}
+          </View>
+
+          <View style={styles.footer}>
+            <TouchableOpacity
+              onPress={() => router.replace(ROUTES.artisanFeed)}
+              style={styles.cta}
+              activeOpacity={0.85}>
+              <Text style={styles.ctaText}>Back to Discover</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
-      
-      <ScrollView 
-        contentContainerClassName="flex-grow justify-center px-6 py-10"
-        showsVerticalScrollIndicator={false}
-      >
-        
-        <View className="items-center mb-8">
-          <View className="h-20 w-20 bg-green-100 rounded-full items-center justify-center mb-4 border-4 border-green-50 shadow-sm">
-            <Feather name="check" size={40} color="#16a34a" />
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <View style={styles.screen}>
+        <View style={styles.status}>
+          <View style={styles.awaitingCircle}>
+            <Feather name="smartphone" size={22} color="#6366f1" />
           </View>
-          <Text className="text-2xl font-sans-extrabold text-primary text-center mb-2">
-            Payment Secured!
-          </Text>
-          <Text className="text-base font-sans-medium text-muted-foreground text-center px-4">
-            Your funds are locked in Escrow. Scan this pass at the factory gate.
-          </Text>
+          <Text style={styles.statusTitle}>Awaiting Pickup</Text>
+          <Text style={styles.statusSubtitle}>Show this QR code at the factory gate</Text>
         </View>
 
-        {/* The Digital Ticket */}
-        <View className="bg-card border border-border rounded-3xl shadow-md overflow-hidden relative mb-8">
-          
-          <View className="bg-primary p-8 items-center justify-center">
-            <View className="bg-white p-4 rounded-2xl shadow-sm mb-6">
-              <QRCode
-                value={qrString}
-                size={180}
-                color="#0f172a" 
-                backgroundColor="#ffffff"
-              />
-            </View>
-            <Text className="text-sm font-sans-bold text-white/70 tracking-widest uppercase mb-1">
-              Pickup Code
-            </Text>
-            <Text className="text-2xl font-sans-extrabold text-white tracking-widest">
-              {qrString}
-            </Text>
+        <View style={styles.card}>
+          <View style={styles.qrWrap}>
+            <QRCode value={qrString} size={qrSize} color="#0b1f1a" backgroundColor="#ffffff" />
           </View>
 
-          {/* Ticket Divider */}
-          <View className="flex-row items-center justify-between absolute top-[320px] w-full z-10 px-0">
-            <View className="h-6 w-3 bg-background rounded-r-full border-r border-y border-border" />
-            <View className="flex-1 h-px border-t border-dashed border-border opacity-50 mx-2" />
-            <View className="h-6 w-3 bg-background rounded-l-full border-l border-y border-border" />
-          </View>
+          <Text style={styles.codeLabel}>PICKUP CODE</Text>
+          <Text style={styles.code} selectable>
+            {qrString}
+          </Text>
 
-          {/* NEW: Receipt Details Section */}
-          <View className="p-6 pt-8 bg-card border-b border-border/50">
-            <Text className="text-xs font-sans-bold text-muted-foreground uppercase tracking-wider mb-4">Order Summary</Text>
-            
-            <View className="flex-row justify-between items-start mb-3">
-              <View className="flex-1 pr-4">
-                <Text className="font-sans-bold text-primary text-base">{displayTitle}</Text>
-                <Text className="font-sans-medium text-muted-foreground text-sm mt-1">{displayWeight} kg</Text>
-              </View>
-              <Text className="font-sans-bold text-primary text-base">
-                GHS {Number(displayAmount).toFixed(2)}
-              </Text>
-            </View>
-          </View>
-
-          <View className="p-6 bg-card">
-            <View className="flex-row items-center">
-              <View className="h-10 w-10 bg-accent/10 rounded-full items-center justify-center mr-3">
-                <Feather name="alert-circle" size={20} color="#ea7a53" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-sm font-sans-bold text-primary">Do not share this code</Text>
-                <Text className="text-xs font-sans-medium text-muted-foreground mt-0.5">
-                  Anyone with this code can claim your materials.
-                </Text>
-              </View>
-            </View>
-          </View>
+          <View style={styles.divider} />
+          {summaryCard}
         </View>
 
-        <TouchableOpacity 
-          onPress={() => router.replace('/(artisan)/feed')}
-          className="w-full items-center justify-center rounded-2xl bg-muted h-16 border border-border"
-        >
-          <Text className="text-lg font-sans-bold text-primary">Return to Marketplace</Text>
-        </TouchableOpacity>
+        <View style={styles.footer}>
+          <View style={styles.waitRow}>
+            <ActivityIndicator size="small" color="#6366f1" />
+            <Text style={styles.waitText}>Waiting for factory to scan…</Text>
+          </View>
+          <View style={styles.lockRow}>
+            <Feather name="lock" size={12} color="#6b7280" />
+            <Text style={styles.lockText}>Do not share — this code claims your materials</Text>
+          </View>
 
-      </ScrollView>
+          <TouchableOpacity
+            onPress={() => router.replace(ROUTES.artisanFeed)}
+            style={styles.secondaryCta}
+            activeOpacity={0.85}>
+            <Text style={styles.secondaryCtaText}>Leave — keep in Orders</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: '#f4f7f5',
+  },
+  loadingBody: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  screen: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 8,
+    justifyContent: 'space-between',
+  },
+  status: {
+    alignItems: 'center',
+  },
+  checkCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#10b981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  awaitingCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#eef2ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  statusTitle: {
+    fontSize: 22,
+    fontFamily: 'sans-extrabold',
+    color: '#0b1f1a',
+    textAlign: 'center',
+  },
+  statusSubtitle: {
+    marginTop: 4,
+    fontSize: 14,
+    fontFamily: 'sans-medium',
+    color: '#6b7280',
+    textAlign: 'center',
+    paddingHorizontal: 12,
+  },
+  card: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 22,
+    alignItems: 'center',
+    shadowColor: '#0b1f1a',
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  confirmedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ecfdf5',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignSelf: 'stretch',
+  },
+  confirmedBadgeText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'sans-semibold',
+    color: '#15803d',
+  },
+  qrWrap: {
+    padding: 14,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  codeLabel: {
+    marginTop: 18,
+    fontSize: 11,
+    fontFamily: 'sans-bold',
+    color: '#6b7280',
+    letterSpacing: 2,
+  },
+  code: {
+    marginTop: 4,
+    fontSize: 22,
+    fontFamily: 'sans-extrabold',
+    color: '#0b1f1a',
+    letterSpacing: 1.5,
+  },
+  divider: {
+    alignSelf: 'stretch',
+    height: 1,
+    backgroundColor: '#e5e7eb',
+    marginVertical: 18,
+  },
+  summaryRow: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  summaryLeft: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  itemTitle: {
+    fontSize: 15,
+    fontFamily: 'sans-bold',
+    color: '#0b1f1a',
+  },
+  itemMeta: {
+    marginTop: 2,
+    fontSize: 13,
+    fontFamily: 'sans-medium',
+    color: '#6b7280',
+  },
+  itemPrice: {
+    fontSize: 16,
+    fontFamily: 'sans-extrabold',
+    color: '#0b1f1a',
+  },
+  footer: {
+    gap: 12,
+  },
+  waitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  waitText: {
+    fontSize: 13,
+    fontFamily: 'sans-medium',
+    color: '#6366f1',
+  },
+  lockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  lockText: {
+    fontSize: 12,
+    fontFamily: 'sans-medium',
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  cta: {
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: '#0b1f1a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ctaText: {
+    fontSize: 16,
+    fontFamily: 'sans-bold',
+    color: '#ffffff',
+  },
+  secondaryCta: {
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryCtaText: {
+    fontSize: 16,
+    fontFamily: 'sans-bold',
+    color: '#0b1f1a',
+  },
+});

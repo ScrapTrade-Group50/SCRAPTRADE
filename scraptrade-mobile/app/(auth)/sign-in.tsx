@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,15 +16,21 @@ import { Link, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../../store/authStore';
 import { apiClient, mapBackendRole } from '@/api/client';
+import { ROUTES } from '@/utils/routes';
 
 export default function SignIn() {
   const router = useRouter();
   const login = useAuthStore((state) => state.login);
+  const { isHydrated, hydrate } = useAuthStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (!isHydrated) hydrate();
+  }, [isHydrated, hydrate]);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -43,9 +49,9 @@ export default function SignIn() {
       await login(role, response.data.userId, response.data.companyName);
 
       if (role === 'factory') {
-        router.replace('/(factory)/dashboard');
+        router.replace(ROUTES.factoryDashboard);
       } else {
-        router.replace('/(artisan)/feed');
+        router.replace(ROUTES.artisanFeed);
       }
     } catch (error: any) {
       console.error('Login Error:', error);

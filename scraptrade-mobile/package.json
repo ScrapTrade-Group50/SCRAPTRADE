@@ -1,15 +1,20 @@
 {
-  "name": "my-expo-app",
+  "name": "scraptrade",
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
     "android": "expo start --android",
     "ios": "expo start --ios",
     "start": "expo start",
+    "sync:lan": "node scripts/sync-lan-env.js",
+    "start:sync": "node scripts/sync-lan-env.js && expo start --lan",
+    "start:tunnel": "expo start --tunnel",
+    "start:lan": "expo start --lan",
     "prebuild": "expo prebuild",
     "lint": "eslint \"**/*.{js,jsx,ts,tsx}\" && prettier -c \"**/*.{js,jsx,ts,tsx,json}\"",
     "format": "eslint \"**/*.{js,jsx,ts,tsx}\" --fix && prettier \"**/*.{js,jsx,ts,tsx,json}\" --write",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build:web": "expo export -p web"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

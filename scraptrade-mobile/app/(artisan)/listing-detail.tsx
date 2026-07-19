@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams, Link } from 'expo-router';
 import { apiClient } from '../../api/client';
+import { useSavedStore } from '../../store/savedStore';
 
 const { width } = Dimensions.get('window');
 
@@ -26,6 +27,7 @@ type Listing = {
   status: string;
   imageUrl: string | null;
   dimensions: string;
+  pickupLocation?: string;
   seller?: {
     companyName: string;
   };
@@ -37,6 +39,24 @@ export default function ListingDetail() {
 
   const [listing, setListing] = useState<Listing | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const numericId = Number(id);
+  const saved = useSavedStore((state) => state.ids.includes(numericId));
+  const toggleSaved = useSavedStore((state) => state.toggle);
+  const fetchSavedIds = useSavedStore((state) => state.fetchIds);
+
+  useEffect(() => {
+    fetchSavedIds();
+  }, [fetchSavedIds]);
+
+  const handleToggleSaved = async () => {
+    if (!numericId) return;
+    try {
+      await toggleSaved(numericId);
+    } catch {
+      Alert.alert('Error', 'Could not update your saved items. Please try again.');
+    }
+  };
 
   useEffect(() => {
     const fetchListingDetail = async () => {
@@ -109,6 +129,7 @@ export default function ListingDetail() {
 
   const totalPrice = (listing.weight * (listing.pricePerUnit || 0)).toFixed(2);
   const factoryDisplayName = listing.seller?.companyName || 'Verified Factory';
+  const pickupLocation = listing.pickupLocation || 'Contact factory for pickup details';
   const displayCategory = listing.category ? listing.category.toUpperCase() : "MATERIAL";
   const isAvailable = listing.status === 'AVAILABLE';
 
@@ -127,6 +148,15 @@ export default function ListingDetail() {
           className="h-12 w-12 bg-black/40 rounded-full items-center justify-center backdrop-blur-sm"
         >
           <Feather name="arrow-left" size={24} color="#ffffff" />
+        </TouchableOpacity>
+      </View>
+
+      <View className="absolute top-12 right-6 z-10">
+        <TouchableOpacity
+          onPress={handleToggleSaved}
+          className="h-12 w-12 bg-black/40 rounded-full items-center justify-center backdrop-blur-sm"
+        >
+          <Feather name="bookmark" size={22} color={saved ? '#a5b4fc' : '#ffffff'} />
         </TouchableOpacity>
       </View>
 
@@ -169,8 +199,8 @@ export default function ListingDetail() {
 
           <View className="flex-row items-center mb-8">
             <Feather name="map-pin" size={16} color="#64748b" />
-            <Text className="text-base font-sans-medium text-muted-foreground ml-2">
-              {factoryDisplayName} • TBD km
+            <Text className="text-base font-sans-medium text-muted-foreground ml-2 flex-1">
+              {factoryDisplayName} • {pickupLocation}
             </Text>
           </View>
 

@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 @Data
 @Entity
 @Table(name = "users")
@@ -27,8 +29,23 @@ public class User {
     @JsonIgnore
     private String passwordHash;
 
+    @JsonIgnore
+    @Column(name = "reset_token")
+    private String resetToken;
+
+    @JsonIgnore
+    @Column(name = "reset_token_expires_at")
+    private LocalDateTime resetTokenExpiresAt;
+
     @Enumerated(EnumType.STRING)
-    private Role role; 
+    private Role role;
+
+    /** Paystack transfer recipient for factory payout after gate-pass scan */
+    @Column(name = "paystack_recipient_code")
+    private String paystackRecipientCode;
+
+    @Column(name = "payout_account_label")
+    private String payoutAccountLabel;
 
     public enum Role {
         FACTORY_SELLER, ARTISAN_BUYER, ADMIN
