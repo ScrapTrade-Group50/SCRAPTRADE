@@ -20,7 +20,7 @@ type Order = {
   };
 };
 
-export default function TransactionsScreen() {
+export default function TransactionsScreen({ isTabRoot = false }: { isTabRoot?: boolean }) {
   const router = useRouter();
   const role = useAuthStore((state) => state.role);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -130,9 +130,11 @@ export default function TransactionsScreen() {
   return (
     <SafeAreaView style={{ flex: 1 }} className="bg-background" edges={['top']}>
       <View className="bg-background border-border/50 mb-4 flex-row items-center border-b px-5 pt-4 pb-2">
-        <TouchableOpacity onPress={() => router.back()} className="mr-4 -ml-2 p-2">
-          <Feather name="arrow-left" size={24} color="#0f172a" />
-        </TouchableOpacity>
+        {!isTabRoot && (
+          <TouchableOpacity onPress={() => router.back()} className="mr-4 -ml-2 p-2">
+            <Feather name="arrow-left" size={24} color="#0f172a" />
+          </TouchableOpacity>
+        )}
         <Text className="font-sans-extrabold text-primary text-2xl">
           {isFactory ? 'Sales History' : 'Order History'}
         </Text>

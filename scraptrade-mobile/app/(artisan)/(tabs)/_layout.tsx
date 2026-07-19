@@ -2,27 +2,37 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ArtisanTabLayout() {
   const THEME_ACCENT = '#6366f1';
   const THEME_MUTED = '#6b7280';
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: false,
+        tabBarActiveTintColor: THEME_ACCENT,
+        tabBarInactiveTintColor: THEME_MUTED,
+        tabBarLabelStyle: {
+          fontFamily: 'sans-semibold',
+          fontSize: 11,
+          marginTop: 2,
+        },
         tabBarStyle: {
           backgroundColor: '#ffffff',
           borderTopWidth: 1,
           borderTopColor: '#d1d5db',
-          height: 85,
-          paddingTop: 10,
+          height: 60 + insets.bottom,
+          paddingTop: 8,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
         },
       }}>
       <Tabs.Screen
         name="feed"
         options={{
+          title: 'Discover',
           tabBarIcon: ({ focused }) => (
             <View className="tabs-icon">
               <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
@@ -36,6 +46,7 @@ export default function ArtisanTabLayout() {
       <Tabs.Screen
         name="saved"
         options={{
+          title: 'Saved',
           tabBarIcon: ({ focused }) => (
             <View className="tabs-icon">
               <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
@@ -46,11 +57,10 @@ export default function ArtisanTabLayout() {
         }}
       />
 
-
-      {/* --- RESTORED TRANSACTIONS TAB --- */}
       <Tabs.Screen
         name="transactions"
         options={{
+          title: 'Orders',
           tabBarIcon: ({ focused }) => (
             <View className="tabs-icon">
               <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
@@ -64,6 +74,7 @@ export default function ArtisanTabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
+          title: 'Profile',
           tabBarIcon: ({ focused }) => (
             <View className="tabs-icon">
               <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
@@ -73,13 +84,6 @@ export default function ArtisanTabLayout() {
           ),
         }}
       />
-
-      {/* HIDDEN SCREENS */}
-      <Tabs.Screen name="listing-detail" options={{ href: null }} />
-      <Tabs.Screen name="checkout" options={{ href: null }} />
-      <Tabs.Screen name="momo-details" options={{ href: null }} />
-      <Tabs.Screen name="gate-pass" options={{ href: null }} />
-      <Tabs.Screen name="personal-info" options={{ href: null }} />
     </Tabs>
   );
 }

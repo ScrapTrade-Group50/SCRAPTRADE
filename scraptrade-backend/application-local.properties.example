@@ -1,0 +1,47 @@
+# Copy to application-local.properties (gitignored) and fill in your values.
+# NEVER commit real credentials to git.
+#
+# Alternative: set env vars instead (DATABASE_PASSWORD, CLOUDINARY_CLOUD_NAME,
+# CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET, JWT_SECRET) and run with SPRING_PROFILES_ACTIVE=dev
+
+spring.profiles.active=dev
+
+spring.datasource.url=jdbc:postgresql://localhost:5432/scraptrade_db
+spring.datasource.username=postgres
+spring.datasource.password=your_db_password_here
+
+# Dev without SendGrid: app.password-reset.expose-token=true (token shown in app)
+# Production-style email: expose-token=false + mail settings below
+
+# Required for production / Docker. Optional for local dev — the API starts without
+# these, but listing photo uploads will fail until Cloudinary is configured.
+cloudinary.cloud-name=your_cloud_name
+cloudinary.api-key=your_api_key
+cloudinary.api-secret=your_api_secret
+
+# Generate with: openssl rand -base64 64
+jwt.secret=your_base64_jwt_secret_here
+
+# Password reset (production) — SendGrid SMTP
+# app.password-reset.expose-token=false
+# app.password-reset.web-reset-url=https://scraptrade-kappa.vercel.app/reset-password
+# app.mail.enabled=true
+# spring.mail.host=smtp.sendgrid.net
+# spring.mail.port=587
+# spring.mail.username=apikey
+# spring.mail.password=your_sendgrid_api_key
+# app.mail.from=SCRAPTRADE <your-verified-sendgrid-email@gmail.com>
+
+# Optional: live MoMo (default is simulated via payment.provider in dev profile)
+# payment.provider=momo
+# payment.momo.api-user=your_momo_api_user
+# payment.momo.api-key=your_momo_api_key
+# payment.momo.subscription-key=your_momo_subscription_key
+
+# Paystack (recommended for production in Ghana)
+# payment.provider=paystack
+# payment.paystack.secret-key=sk_test_...
+# payment.paystack.public-key=pk_test_...
+# payment.paystack.callback-url=scraptrade://checkout
+# Starter Paystack accounts cannot transfer — set true for local dev:
+# payment.paystack.skip-transfers=true

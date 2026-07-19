@@ -16,6 +16,7 @@ import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { apiClient } from '../../api/client'; // Adjust path if needed
+import { uploadListingImage, getUploadErrorMessage, type PickedImage } from '@/utils/uploadImage';
 
 export default function CreateListing() {
   const router = useRouter();
@@ -26,8 +27,9 @@ export default function CreateListing() {
   const [description, setDescription] = useState('');
   const [weight, setWeight] = useState('');
   const [dimensions, setDimensions] = useState('');
+  const [pickupLocation, setPickupLocation] = useState('');
   const [price, setPrice] = useState('');
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [image, setImage] = useState<PickedImage | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   // --- 1. PHOTO PICKER FUNCTION ---
@@ -47,56 +49,58 @@ export default function CreateListing() {
     });
 
     if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      setImage({
+        uri: asset.uri,
+        fileName: asset.fileName,
+        mimeType: asset.mimeType,
+      });
     }
   };
 
   // --- 2. BACKEND SUBMISSION FUNCTION ---
   const handleSubmit = async () => {
-    if (!title || !weight || !price || !imageUri) {
-      Alert.alert('Missing Info', 'Please fill in the title, weight, price, and select a photo.');
+    if (!title || !weight || !price || !image || !pickupLocation) {
+      Alert.alert('Missing Info', 'Please fill in title, weight, price per kg, pickup location, and select a photo.');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      // Phase 1: Create the database record (hardcoded sellerId=1 for testing)
       const listingResponse = await apiClient.post('/listings', {
         title: title,
         description: description,
         category: category,
         weight: parseFloat(weight),
         dimensions: dimensions,
+        pickupLocation: pickupLocation,
         pricePerUnit: parseFloat(price),
       });
 
       const newListingId = listingResponse.data.id;
 
-      // Phase 2: Upload the physical image to Cloudinary
-      const formData = new FormData();
-      const filename = imageUri.split('/').pop() || 'image.jpg';
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : `image`;
+      // Phase 2: Upload the image. The listing already exists at this point, so an
+      // image failure (e.g. Cloudinary misconfig) must NOT be reported as a total failure.
+      let imageFailed = false;
+      let uploadError: unknown = null;
+      try {
+        await uploadListingImage(newListingId, image);
+      } catch (imageError: unknown) {
+        imageFailed = true;
+        uploadError = imageError;
+      }
 
-      formData.append('file', {
-        uri: imageUri,
-        name: filename,
-        type: type,
-      } as any);
+      const successMsg = imageFailed
+        ? `Your listing was created, but the photo could not be uploaded. ${getUploadErrorMessage(uploadError)}`
+        : 'Your scrap listing is now live.';
 
-      await apiClient.post(`/listings/${newListingId}/image`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      // Phase 3: Success! Navigate back to the dashboard (WEB & MOBILE SAFE)
+      // Phase 3: Navigate back to the dashboard (WEB & MOBILE SAFE)
       if (Platform.OS === 'web') {
-        window.alert('Success! Your scrap listing is now live.');
+        window.alert(successMsg);
         router.back();
       } else {
-        Alert.alert('Success!', 'Your scrap listing is now live.', [
+        Alert.alert(imageFailed ? 'Listing Created' : 'Success!', successMsg, [
           {
             text: 'OK',
             onPress: () => {
@@ -109,8 +113,8 @@ export default function CreateListing() {
         ]);
       }
     } catch (error: any) {
-      console.error('Upload failed:', error);
-      Alert.alert('Upload Failed', 'Something went wrong while connecting to the server.');
+      console.error('Create listing failed:', error);
+      Alert.alert('Create Failed', error.response?.data?.message || 'Something went wrong while connecting to the server.');
     } finally {
       setIsLoading(false);
     }
@@ -138,12 +142,12 @@ export default function CreateListing() {
           <TouchableOpacity
             onPress={pickImage}
             className="bg-card border-border mb-8 h-48 w-full items-center justify-center overflow-hidden rounded-3xl border-2 border-dashed">
-            {imageUri ? (
-              <Image source={{ uri: imageUri }} className="h-full w-full" resizeMode="cover" />
+            {image ? (
+              <Image source={{ uri: image.uri }} className="h-full w-full" resizeMode="cover" />
             ) : (
               <>
                 <View className="bg-background border-border mb-2 h-14 w-14 items-center justify-center rounded-full border shadow-sm">
-                  <Feather name="camera" size={24} color="#f97316" />
+                  <Feather name="camera" size={24} color="#6366f1" />
                 </View>
                 <Text className="font-sans-bold text-primary text-base">Tap to Add Photos</Text>
                 <Text className="font-sans-medium text-muted-foreground mt-1 text-sm">
@@ -225,14 +229,25 @@ export default function CreateListing() {
             </View>
 
             <View className="gap-2">
-              <Text className="font-sans-semibold text-primary text-sm">Asking Price (GHS) *</Text>
+              <Text className="font-sans-semibold text-primary text-sm">Pickup Location *</Text>
+              <TextInput
+                value={pickupLocation}
+                onChangeText={setPickupLocation}
+                className="border-border bg-card font-sans-medium text-primary rounded-xl border px-4 py-3 text-base"
+                placeholder="e.g., Plot 12, Spintex Road, Accra"
+                placeholderTextColor="#64748b"
+              />
+            </View>
+
+            <View className="gap-2">
+              <Text className="font-sans-semibold text-primary text-sm">Price per kg (GHS) *</Text>
               <TextInput
                 value={price}
                 onChangeText={setPrice}
                 className="border-border bg-card font-sans-medium text-primary rounded-xl border px-4 py-3 text-base"
-                placeholder="e.g., 250"
+                placeholder="e.g., 5.50"
                 placeholderTextColor="#64748b"
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
               />
             </View>
           </View>

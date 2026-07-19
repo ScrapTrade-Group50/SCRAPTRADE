@@ -1,6 +1,6 @@
 // app/(artisan)/transactions.tsx
-import SharedTransactionsScreen from '../transactions';
+import SharedTransactionsScreen from '@/app/transactions';
 
 export default function ArtisanTransactionsTab() {
-  return <SharedTransactionsScreen />;
+  return <SharedTransactionsScreen isTabRoot />;
 }

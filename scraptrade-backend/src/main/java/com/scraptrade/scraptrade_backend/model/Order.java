@@ -37,8 +37,25 @@ public class Order {
     @Column(name = "momo_number")
     private String momoNumber;
 
+    @Column(name = "payment_reference", unique = true)
+    private String paymentReference;
+
+    @Column(name = "payout_reference", unique = true)
+    private String payoutReference;
+
+    @Column(name = "seller_payout_amount")
+    private BigDecimal sellerPayoutAmount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payout_status")
+    private PayoutStatus payoutStatus;
+
     @Enumerated(EnumType.STRING)
     private Status status;
+
+    public enum PayoutStatus {
+        NOT_APPLICABLE, PENDING, RELEASED, FAILED
+    }
 
     public enum Status {
         PAID_TO_ESCROW, COMPLETED

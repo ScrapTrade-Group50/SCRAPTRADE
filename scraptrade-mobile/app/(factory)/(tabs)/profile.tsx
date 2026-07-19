@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, Link } from 'expo-router';
 import { useAuthStore } from '@/store/authStore';
+import { ROUTES } from '@/utils/routes';
 
 export default function FactoryProfile() {
   const router = useRouter();
@@ -13,8 +14,6 @@ export default function FactoryProfile() {
   const user = {
     name: companyName || 'Factory User',
     role: 'Factory (Seller)',
-    phone: '024 987 6543',
-    memberSince: 'Jan 2022',
   };
 
   const THEME_PRIMARY = '#0b1f1a';
@@ -28,7 +27,7 @@ export default function FactoryProfile() {
         onPress: async () => {
           try {
             await logout();
-            router.replace('/(auth)/sign-in');
+            router.replace(ROUTES.welcome);
           } catch (error) {
             console.error('Error during logout:', error);
           }
@@ -37,7 +36,7 @@ export default function FactoryProfile() {
     ]);
   };
 
-  const renderMenuItem = (icon: any, title: string, subtitle?: string, href?: string) => {
+  const renderMenuItem = (icon: keyof typeof Feather.glyphMap, title: string, subtitle?: string, href?: string) => {
     const MenuItemContent = (
       <TouchableOpacity className="flex-row items-center justify-between bg-card p-4 rounded-2xl mb-3 border border-border shadow-sm">
         <View className="flex-row items-center">
@@ -66,26 +65,18 @@ export default function FactoryProfile() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" style={{ flex: 1 }} edges={['top']}>
-      
-      {/* HEADER: Navigation */}
       <View className="flex-row items-center px-6 py-4 bg-background border-b border-border">
-        <TouchableOpacity onPress={() => router.back()} className="mr-4 p-1">
-          <Feather name="arrow-left" size={24} color={THEME_PRIMARY} />
-        </TouchableOpacity>
         <Text className="text-xl font-sans-bold text-primary">Factory Profile</Text>
       </View>
 
-      <ScrollView 
-        style={{ flex: 1 }} 
+      <ScrollView
+        style={{ flex: 1 }}
         contentContainerClassName="px-6 pt-6 pb-12"
-        showsVerticalScrollIndicator={false}
-      >
-        
-        {/* 1. Factory Info Card */}
+        showsVerticalScrollIndicator={false}>
         <View className="bg-card rounded-3xl p-6 border border-border shadow-sm items-center mb-8">
           <View className="h-24 w-24 bg-accent/10 rounded-full items-center justify-center mb-4 border-4 border-card shadow-sm">
             <Text className="text-3xl font-sans-bold text-accent">
-              {user.name.split(' ').map(n => n[0]).join('')}
+              {user.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
             </Text>
           </View>
           <Text className="text-2xl font-sans-bold text-primary text-center">{user.name}</Text>
@@ -94,24 +85,22 @@ export default function FactoryProfile() {
           </View>
         </View>
 
-        {/* 2. Business Settings */}
-        <Text className="text-sm font-sans-bold text-muted-foreground uppercase tracking-widest mb-3 ml-2">Business Settings</Text>
-        {renderMenuItem("briefcase", "Company Details", "Registration and contact info", "/company-details")}
-        {renderMenuItem("dollar-sign", "Payout Methods", "Manage your bank and MoMo details", "/momo-details")}
-        {renderMenuItem("map-pin", "Warehouse Locations", "Manage your scrap pickup addresses", "/warehouse-locations")}
-        {renderMenuItem("bar-chart-2", "Sales History", "View your past sales and revenue", "/transactions")}
+        <Text className="text-sm font-sans-bold text-muted-foreground uppercase tracking-widest mb-3 ml-2">
+          Business
+        </Text>
+        {renderMenuItem('briefcase', 'Company Details', 'Business name and contact info', '/(factory)/company-details')}
+        {renderMenuItem('dollar-sign', 'Payout Account', 'MoMo wallet for escrow releases', '/(factory)/payout-setup')}
+        {renderMenuItem('map-pin', 'Warehouses', 'Manage your pickup locations', '/(factory)/warehouse-locations')}
 
-        {/* 3. Preferences */}
-        <Text className="text-sm font-sans-bold text-muted-foreground uppercase tracking-widest mb-3 ml-2 mt-6">Preferences</Text>
-        {renderMenuItem("bell", "Notifications", "Alerts for new orders and pickups", "/notifications")}
-        {renderMenuItem("shield", "Privacy & Security", "Password and app lock", "/privacy-security")}
-        {renderMenuItem("help-circle", "Help & Support", "Contact SCRAPTRADE support", "/help-support")}
-        
-        {/* 4. Log Out Button */}
-        <TouchableOpacity 
+        <Text className="text-sm font-sans-bold text-muted-foreground uppercase tracking-widest mb-3 ml-2 mt-6">
+          Support
+        </Text>
+        {renderMenuItem('shield', 'Privacy & Security', 'Password and account settings', '/privacy-security')}
+        {renderMenuItem('help-circle', 'Help & Support', 'Contact SCRAPTRADE support', '/help-support')}
+
+        <TouchableOpacity
           onPress={handleLogout}
-          className="w-full flex-row items-center justify-center rounded-xl bg-red-50 py-4 mt-8 border border-red-100"
-        >
+          className="w-full flex-row items-center justify-center rounded-xl bg-red-50 py-4 mt-8 border border-red-100">
           <Feather name="log-out" size={20} color="#ef4444" />
           <Text className="text-base font-sans-bold text-red-500 ml-2">Sign Out</Text>
         </TouchableOpacity>
@@ -119,7 +108,6 @@ export default function FactoryProfile() {
         <Text className="text-center text-xs font-sans-medium text-muted-foreground mt-8">
           SCRAPTRADE v1.0.0
         </Text>
-
       </ScrollView>
     </SafeAreaView>
   );

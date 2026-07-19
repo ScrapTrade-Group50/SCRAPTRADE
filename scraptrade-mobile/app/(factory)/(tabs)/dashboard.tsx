@@ -11,10 +11,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { Link, useFocusEffect } from 'expo-router'; // <-- Added useFocusEffect
-import { apiClient } from '../../api/client';
-import SkeletonCard from '../../components/SkeletonCard'; 
-import EmptyState from '../../components/EmptyState'; 
+import { Link, useFocusEffect, useRouter } from 'expo-router';
+import { apiClient } from '@/api/client';
+import SkeletonCard from '@/components/SkeletonCard'; 
+import EmptyState from '@/components/EmptyState'; 
+import NotificationBell from '@/components/NotificationBell';
+import { ROUTES } from '@/utils/routes';
 
 type Listing = {
   id: number;
@@ -25,9 +27,11 @@ type Listing = {
   status: string;
   imageUrl: string | null;
   dimensions: string;
+  pickupLocation?: string;
 };
 
 export default function FactoryDashboard() {
+  const router = useRouter();
   const [listings, setListings] = useState<Listing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -85,7 +89,8 @@ export default function FactoryDashboard() {
 
   // --- COMPACT DASHBOARD METRICS ---
   const activeCount = listings.filter((item) => item.status === 'AVAILABLE').length;
-  const pendingCount = listings.filter((item) => item.status === 'PENDING_PICKUP').length;
+  const pendingListings = listings.filter((item) => item.status === 'PENDING_PICKUP');
+  const pendingCount = pendingListings.length;
   
   const soldListings = listings.filter((item) => item.status === 'SOLD');
   const soldCount = soldListings.length;
@@ -130,7 +135,7 @@ export default function FactoryDashboard() {
             {item.title}
           </Text>
           <Text className="font-sans-bold text-sm text-green-600">
-            GHS {(item.pricePerUnit ?? 0).toFixed(2)}
+            GHS {(item.pricePerUnit ?? 0).toFixed(2)}/kg
           </Text>
         </View>
 
@@ -145,12 +150,18 @@ export default function FactoryDashboard() {
           
           {/* Only allow deletion if the item hasn't been paid for yet */}
           {item.status === 'AVAILABLE' ? (
-            <TouchableOpacity 
-              onPress={() => handleDelete(item.id)} 
-              className="p-1.5 rounded-md bg-red-50 mt-1"
-            >
-              <Feather name="trash-2" size={16} color="#ef4444" />
-            </TouchableOpacity>
+            <View className="flex-row gap-1 mt-1">
+              <TouchableOpacity
+                onPress={() => router.push(`/(factory)/edit-listing?id=${item.id}`)}
+                className="p-1.5 rounded-md bg-accent/10">
+                <Feather name="edit-2" size={16} color="#6366f1" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => handleDelete(item.id)}
+                className="p-1.5 rounded-md bg-red-50">
+                <Feather name="trash-2" size={16} color="#ef4444" />
+              </TouchableOpacity>
+            </View>
           ) : (
              <View className="h-8" /> // Invisible spacer to keep layout aligned
           )}
@@ -163,7 +174,10 @@ export default function FactoryDashboard() {
   return (
     <SafeAreaView className="bg-background" style={{ flex: 1 }} edges={['top']}>
       <View className="bg-background px-6 py-4">
-        <Text className="font-sans-bold text-primary mb-4 text-2xl">Dashboard</Text>
+        <View className="flex-row items-center justify-between mb-4">
+          <Text className="font-sans-bold text-primary text-2xl">Dashboard</Text>
+          <NotificationBell />
+        </View>
 
         {/* --- THE NEW 2x2 COMPACT METRICS GRID --- */}
         <View className="flex-row flex-wrap justify-between gap-y-3">
@@ -208,7 +222,9 @@ export default function FactoryDashboard() {
                 <Feather name="dollar-sign" size={14} color="#7e22ce" />
               </View>
               <Text className="font-sans-extrabold text-primary text-lg" numberOfLines={1}>
-                {totalRevenue > 9999 ? `${(totalRevenue/1000).toFixed(1)}k` : totalRevenue}
+                {totalRevenue >= 10000
+                  ? `${(totalRevenue / 1000).toFixed(1)}k`
+                  : Math.round(totalRevenue).toLocaleString('en-US')}
               </Text>
             </View>
             <Text className="font-sans-semibold text-muted-foreground text-xs">Revenue (GHS)</Text>
@@ -216,6 +232,34 @@ export default function FactoryDashboard() {
 
         </View>
       </View>
+
+      {pendingCount > 0 && (
+        <View className="px-6 pb-2">
+          <Text className="font-sans-bold text-primary mb-3 text-lg">Pending Pickups</Text>
+          {pendingListings.map((item) => (
+            <View
+              key={item.id}
+              className="bg-orange-50 border-orange-200 mb-3 flex-row items-center rounded-2xl border p-4">
+              <View className="bg-orange-100 mr-3 h-10 w-10 items-center justify-center rounded-full">
+                <Feather name="clock" size={18} color="#ea580c" />
+              </View>
+              <View className="flex-1">
+                <Text className="font-sans-bold text-primary text-base" numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <Text className="font-sans-medium text-muted-foreground text-xs mt-1">
+                  {item.weight} kg{item.pickupLocation ? ` • ${item.pickupLocation}` : ''}
+                </Text>
+              </View>
+              <Link href={ROUTES.factoryScanner} asChild>
+                <TouchableOpacity className="bg-accent rounded-xl px-3 py-2">
+                  <Text className="font-sans-bold text-xs text-white">Scan</Text>
+                </TouchableOpacity>
+              </Link>
+            </View>
+          ))}
+        </View>
+      )}
 
       <View style={{ flex: 1 }} className="px-6 pt-2">
         <Text className="font-sans-bold text-primary mb-3 text-lg">Inventory List</Text>

@@ -1,30 +1,38 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function FactoryTabLayout() {
-  // Extracting your theme colors for the icons
-  const THEME_ACCENT = '#6366f1'; // Your indigo active color
-  const THEME_MUTED = '#6b7280'; // Your muted gray inactive color
+  const THEME_ACCENT = '#6366f1';
+  const THEME_MUTED = '#6b7280';
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
       screenOptions={{
-        headerShown: false, // We hide the default headers since you built custom ones
-        tabBarShowLabel: false, // Hiding text labels for that premium, clean look
+        headerShown: false,
+        tabBarActiveTintColor: THEME_ACCENT,
+        tabBarInactiveTintColor: THEME_MUTED,
+        tabBarLabelStyle: {
+          fontFamily: 'sans-semibold',
+          fontSize: 11,
+          marginTop: 2,
+        },
         tabBarStyle: {
           backgroundColor: '#ffffff',
           borderTopWidth: 1,
           borderTopColor: '#d1d5db',
-          height: 85, // Tall enough to handle the safe area on iPhones
-          paddingTop: 10,
+          height: 60 + insets.bottom,
+          paddingTop: 8,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
         },
       }}>
-      {/* 1. Dashboard Tab */}
       <Tabs.Screen
         name="dashboard"
         options={{
+          title: 'Dashboard',
           tabBarIcon: ({ focused }) => (
             <View className="tabs-icon">
               <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
@@ -35,24 +43,42 @@ export default function FactoryTabLayout() {
         }}
       />
 
-      {/* 2. QR Scanner Tab */}
       <Tabs.Screen
         name="scanner"
         options={{
+          title: 'Scan',
           tabBarIcon: ({ focused }) => (
             <View className="tabs-icon">
               <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
-                <Feather name="maximize" size={24} color={focused ? THEME_ACCENT : THEME_MUTED} />
+                <MaterialCommunityIcons
+                  name="qrcode-scan"
+                  size={24}
+                  color={focused ? THEME_ACCENT : THEME_MUTED}
+                />
               </View>
             </View>
           ),
         }}
       />
 
-      {/* 3. Global Profile Tab (Using href to point outside the factory folder) */}
+      <Tabs.Screen
+        name="transactions"
+        options={{
+          title: 'Sales',
+          tabBarIcon: ({ focused }) => (
+            <View className="tabs-icon">
+              <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
+                <Feather name="file-text" size={24} color={focused ? THEME_ACCENT : THEME_MUTED} />
+              </View>
+            </View>
+          ),
+        }}
+      />
+
       <Tabs.Screen
         name="profile"
         options={{
+          title: 'Profile',
           tabBarIcon: ({ focused }) => (
             <View className="tabs-icon">
               <View className={`tabs-pill ${focused ? 'tabs-active' : ''}`}>
@@ -62,13 +88,6 @@ export default function FactoryTabLayout() {
           ),
         }}
       />
-
-      {/* --- HIDDEN SCREENS --- */}
-      {/* We want these screens in the factory group, but NOT on the bottom tab bar */}
-      <Tabs.Screen name="create-listing" options={{ href: null }} />
-      <Tabs.Screen name="edit-listing" options={{ href: null }} />
-      <Tabs.Screen name="company-details" options={{ href: null }} />
-      <Tabs.Screen name="warehouse-locations" options={{ href: null }} />
     </Tabs>
   );
 }

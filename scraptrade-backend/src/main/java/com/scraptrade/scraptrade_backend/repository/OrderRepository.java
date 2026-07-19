@@ -12,6 +12,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     Order findByGatePassCode(String gatePassCode);
 
+    Order findByPaymentReference(String paymentReference);
+
     List<Order> findByBuyer(User buyer);
 
     List<Order> findByListingSeller(User seller);
