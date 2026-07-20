@@ -3,6 +3,7 @@ import { Appearance } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ResolvedTheme, ThemeMode } from '@/constants/theme';
 import { getThemeColors, type ThemeColors } from '@/constants/theme';
+import { applyResolvedColorScheme } from '@/utils/colorScheme';
 
 const STORAGE_KEY = 'scraptrade.themeMode';
 
@@ -37,17 +38,17 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
       const mode: ThemeMode =
         stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'dark';
       const resolved = resolveScheme(mode);
-      Appearance.setColorScheme(resolved);
+      applyResolvedColorScheme(resolved);
       set({ mode, resolved, colors: getThemeColors(resolved), isHydrated: true });
     } catch {
-      Appearance.setColorScheme('dark');
+      applyResolvedColorScheme('dark');
       set({ mode: 'dark', resolved: 'dark', colors: getThemeColors('dark'), isHydrated: true });
     }
   },
 
   setMode: async (mode) => {
     const resolved = resolveScheme(mode);
-    Appearance.setColorScheme(resolved);
+    applyResolvedColorScheme(resolved);
     set({ mode, resolved, colors: getThemeColors(resolved) });
     try {
       await AsyncStorage.setItem(STORAGE_KEY, mode);
@@ -65,7 +66,7 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     if (get().mode !== 'system') return;
     const resolved = resolveScheme('system');
     if (resolved === get().resolved) return;
-    Appearance.setColorScheme(resolved);
+    applyResolvedColorScheme(resolved);
     set({ resolved, colors: getThemeColors(resolved) });
   },
 }));
