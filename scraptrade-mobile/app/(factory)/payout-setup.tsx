@@ -4,17 +4,27 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { apiClient } from '../../api/client';
 import { useAuthStore } from '@/store/authStore';
 import { showAlert } from '../../utils/alert';
+import ScreenHeader from '@/components/ScreenHeader';
+import ThemedSafeAreaView from '@/components/ThemedSafeAreaView';
+import { useScreenTheme } from '@/hooks/useScreenTheme';
+import { Button, TextField } from '@/components/ui';
+import {
+  validateMomoNumber,
+  validateRequiredText,
+  type FieldErrors,
+  hasErrors,
+} from '@/utils/validation';
+
+type PayoutFields = 'accountName' | 'msisdn';
 
 type PayoutStatus = {
   paystackEnabled: boolean;
@@ -30,6 +40,8 @@ const PROVIDERS = [
 
 export default function PayoutSetup() {
   const router = useRouter();
+  const theme = useScreenTheme();
+  const { colors } = theme;
   const companyName = useAuthStore((s) => s.companyName);
 
   const [status, setStatus] = useState<PayoutStatus | null>(null);
@@ -38,6 +50,7 @@ export default function PayoutSetup() {
   const [accountName, setAccountName] = useState(companyName ?? '');
   const [msisdn, setMsisdn] = useState('');
   const [provider, setProvider] = useState('MTN');
+  const [errors, setErrors] = useState<FieldErrors<PayoutFields>>({});
 
   const loadStatus = async () => {
     try {
@@ -57,16 +70,22 @@ export default function PayoutSetup() {
     }, [])
   );
 
+  const validate = () => {
+    const next: FieldErrors<PayoutFields> = {
+      accountName: validateRequiredText(accountName, 'Account name', { min: 2 }) ?? undefined,
+      msisdn: validateMomoNumber(msisdn) ?? undefined,
+    };
+    setErrors(next);
+    return !hasErrors(next);
+  };
+
   const handleSetup = async () => {
-    if (msisdn.replace(/\D/g, '').length < 10) {
-      showAlert('Invalid Number', 'Please enter a valid 10-digit MoMo number.');
-      return;
-    }
+    if (!validate()) return;
     setIsSaving(true);
     try {
       const response = await apiClient.post('/payouts/setup', {
-        accountName: accountName.trim() || companyName,
-        msisdn: msisdn.trim(),
+        accountName: accountName.trim(),
+        msisdn: msisdn.trim().replace(/\s+/g, ''),
         provider,
       });
       showAlert('Payout linked', response.data.message, [
@@ -81,118 +100,116 @@ export default function PayoutSetup() {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 bg-background items-center justify-center">
-        <ActivityIndicator size="large" color="#6366f1" />
-      </SafeAreaView>
+      <ThemedSafeAreaView className="items-center justify-center">
+        <ActivityIndicator size="large" color={colors.accent} />
+      </ThemedSafeAreaView>
     );
   }
 
   if (!status?.paystackEnabled) {
     return (
-      <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-        <View className="flex-row items-center px-6 py-4 border-b border-border">
-          <TouchableOpacity onPress={() => router.back()} className="mr-4 p-1">
-            <Feather name="arrow-left" size={24} color="#0b1f1a" />
-          </TouchableOpacity>
-          <Text className="text-xl font-sans-bold text-primary">Payout Account</Text>
-        </View>
+      <ThemedSafeAreaView edges={['top']}>
+        <ScreenHeader title="Payout Account" />
         <View className="flex-1 items-center justify-center px-8">
-          <Text className="text-center text-muted-foreground font-sans-medium">
+          <Text className="text-center font-sans-medium" style={theme.textMuted}>
             Paystack payouts are not enabled on this server.
           </Text>
         </View>
-      </SafeAreaView>
+      </ThemedSafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background" style={{ flex: 1 }} edges={['top']}>
-      <View className="flex-row items-center px-6 py-4 border-b border-border">
-        <TouchableOpacity onPress={() => router.back()} className="mr-4 p-1">
-          <Feather name="arrow-left" size={24} color="#0b1f1a" />
-        </TouchableOpacity>
-        <Text className="text-xl font-sans-bold text-primary">Payout Account</Text>
-      </View>
+    <ThemedSafeAreaView edges={['top']}>
+      <ScreenHeader title="Payout Account" />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}>
         <ScrollView contentContainerClassName="px-6 pt-6 pb-12" showsVerticalScrollIndicator={false}>
-          <View className="mb-6 flex-row items-start rounded-xl border border-blue-100 bg-blue-50 p-4">
-            <Feather name="info" size={20} color="#1d4ed8" />
-            <Text className="ml-3 flex-1 text-sm font-sans-medium text-blue-900">
+          <View className="mb-6 flex-row items-start rounded-xl border p-4" style={theme.accentSoft}>
+            <Feather name="info" size={20} color={colors.accent} />
+            <Text className="ml-3 flex-1 text-sm font-sans-medium" style={theme.textPrimary}>
               Buyer payments stay in SCRAPTRADE escrow until you scan a gate pass. Funds are then
               transferred to this MoMo wallet (minus the platform escrow fee).
             </Text>
           </View>
 
           {status.configured && (
-            <View className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-              <View className="flex-row items-center mb-2">
-                <Feather name="check-circle" size={20} color="#059669" />
-                <Text className="ml-2 font-sans-bold text-emerald-800">Payout active</Text>
+            <View className="mb-6 rounded-2xl border p-5" style={theme.successSoft}>
+              <View className="mb-2 flex-row items-center">
+                <Feather name="check-circle" size={20} color={colors.success} />
+                <Text className="ml-2 font-sans-bold" style={theme.textSuccess}>
+                  Payout active
+                </Text>
               </View>
-              <Text className="font-sans-medium text-emerald-900">{status.accountLabel}</Text>
-              <Text className="mt-2 text-xs font-sans-medium text-emerald-700">
+              <Text className="font-sans-medium" style={theme.textPrimary}>
+                {status.accountLabel}
+              </Text>
+              <Text className="mt-2 text-xs font-sans-medium" style={theme.textSuccess}>
                 Update below to change where escrow releases are sent.
               </Text>
             </View>
           )}
 
-          <Text className="text-sm font-sans-semibold text-primary mb-2 ml-1">Account name</Text>
-          <TextInput
-            className="mb-4 rounded-xl border border-border bg-card px-4 py-4 font-sans-medium text-primary"
+          <TextField
+            label="Account name"
+            leftIcon="user"
+            containerClassName="mb-4"
             value={accountName}
-            onChangeText={setAccountName}
+            error={errors.accountName}
             placeholder="Factory or business name"
-            placeholderTextColor="#94a3b8"
+            onChangeText={(v) => {
+              setAccountName(v);
+              setErrors((e) => ({ ...e, accountName: undefined }));
+            }}
           />
 
-          <Text className="text-sm font-sans-semibold text-primary mb-2 ml-1">Network</Text>
+          <Text className="mb-2 ml-1 text-sm font-sans-semibold" style={theme.textPrimary}>
+            Network
+          </Text>
           <View className="mb-4 flex-row flex-wrap gap-2">
             {PROVIDERS.map((item) => (
               <TouchableOpacity
                 key={item.id}
                 onPress={() => setProvider(item.id)}
-                className={`rounded-full border px-4 py-2 ${
-                  provider === item.id ? 'border-accent bg-accent/10' : 'border-border bg-card'
-                }`}>
+                className="rounded-full border px-4 py-2"
+                style={
+                  provider === item.id
+                    ? { ...theme.accentSoft, borderColor: colors.accent }
+                    : theme.card
+                }>
                 <Text
-                  className={`font-sans-semibold text-sm ${
-                    provider === item.id ? 'text-accent' : 'text-muted-foreground'
-                  }`}>
+                  className="font-sans-semibold text-sm"
+                  style={provider === item.id ? theme.textAccent : theme.textMuted}>
                   {item.label}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          <Text className="text-sm font-sans-semibold text-primary mb-2 ml-1">MoMo number</Text>
-          <TextInput
-            className="mb-6 rounded-xl border border-border bg-card px-4 py-4 font-sans-medium text-primary"
+          <TextField
+            label="MoMo number"
+            leftIcon="phone"
+            containerClassName="mb-6"
             value={msisdn}
-            onChangeText={setMsisdn}
+            error={errors.msisdn}
             keyboardType="phone-pad"
-            placeholder="024 123 4567"
-            placeholderTextColor="#94a3b8"
+            placeholder="0241234567"
+            textContentType="telephoneNumber"
+            onChangeText={(v) => {
+              setMsisdn(v);
+              setErrors((e) => ({ ...e, msisdn: undefined }));
+            }}
           />
 
-          <TouchableOpacity
+          <Button
+            label={status.configured ? 'Update payout account' : 'Link payout account'}
+            loading={isSaving}
             onPress={handleSetup}
-            disabled={isSaving}
-            className={`w-full flex-row items-center justify-center rounded-xl py-4 ${
-              isSaving ? 'bg-accent/70' : 'bg-accent'
-            }`}>
-            {isSaving ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text className="font-sans-bold text-base text-white">
-                {status.configured ? 'Update payout account' : 'Link payout account'}
-              </Text>
-            )}
-          </TouchableOpacity>
+          />
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </ThemedSafeAreaView>
   );
 }

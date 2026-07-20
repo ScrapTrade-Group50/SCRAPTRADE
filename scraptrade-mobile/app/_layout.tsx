@@ -4,6 +4,22 @@ import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-rout
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { ROUTES } from '@/utils/routes';
+import ThemeProvider from '@/components/ThemeProvider';
+import GlobalDialogs from '@/components/GlobalDialogs';
+import { useThemeStore } from '@/store/themeStore';
+
+function AppStack() {
+  const backgroundColor = useThemeStore((s) => s.colors.background);
+
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor },
+      }}
+    />
+  );
+}
 
 export default function Layout() {
   const { isAuthenticated, isHydrated, role } = useAuthStore();
@@ -15,6 +31,9 @@ export default function Layout() {
     if (!isHydrated || !rootNavigationState?.key) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const authScreen = inAuthGroup ? (segments[1] as string | undefined) : undefined;
+    const onPasswordRecovery =
+      authScreen === 'forgot-password' || authScreen === 'reset-password';
     const inFactoryGroup = segments[0] === '(factory)';
     const inArtisanGroup = segments[0] === '(artisan)';
     const firstSegment = segments[0] as string | undefined;
@@ -25,7 +44,7 @@ export default function Layout() {
 
     if (!isAuthenticated && !inAuthGroup) {
       router.replace(ROUTES.welcome);
-    } else if (isAuthenticated && inAuthGroup) {
+    } else if (isAuthenticated && inAuthGroup && !onPasswordRecovery) {
       if (role === 'factory') {
         router.replace(ROUTES.factoryDashboard);
       } else if (role === 'artisan') {
@@ -40,7 +59,10 @@ export default function Layout() {
 
   return (
     <SafeAreaProvider>
-      <Stack screenOptions={{ headerShown: false }} />
+      <ThemeProvider>
+        <AppStack />
+        <GlobalDialogs />
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

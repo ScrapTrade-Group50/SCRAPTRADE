@@ -1,11 +1,14 @@
-import React, { useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, RefreshControl } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { apiClient } from '../api/client';
 import SkeletonCard from '../components/SkeletonCard';
 import EmptyState from '../components/EmptyState';
+import ScreenHeader from '../components/ScreenHeader';
+import SegmentedControl from '@/components/SegmentedControl';
+import ThemedSafeAreaView from '@/components/ThemedSafeAreaView';
+import { useScreenTheme } from '@/hooks/useScreenTheme';
 
 type AppNotification = {
   id: number;
@@ -35,12 +38,16 @@ function timeAgo(iso: string): string {
   return `${days}d ago`;
 }
 
+type NotificationFilter = 'all' | 'unread' | 'orders';
+
 export default function Notifications() {
-  const router = useRouter();
+  const theme = useScreenTheme();
+  const { colors, resolved } = theme;
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [filter, setFilter] = useState<NotificationFilter>('all');
 
   const fetchNotifications = async () => {
     setErrorMessage(null);
@@ -68,6 +75,14 @@ export default function Notifications() {
 
   const hasUnread = notifications.some((n) => !n.read);
 
+  const filteredNotifications = useMemo(() => {
+    if (filter === 'unread') return notifications.filter((n) => !n.read);
+    if (filter === 'orders') {
+      return notifications.filter((n) => n.type === 'ORDER_PAID' || n.type === 'PICKUP_COMPLETED');
+    }
+    return notifications;
+  }, [notifications, filter]);
+
   const markAllRead = async () => {
     if (!hasUnread) return;
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
@@ -93,30 +108,50 @@ export default function Notifications() {
 
   const renderItem = ({ item }: { item: AppNotification }) => {
     const icon = ICON_BY_TYPE[item.type] ?? 'bell';
+    const cardStyle = item.read
+      ? theme.card
+      : {
+          backgroundColor: `${colors.accent}0D`,
+          borderColor: `${colors.accent}4D`,
+        };
+    const iconWrapStyle = item.read
+      ? { backgroundColor: colors.background, borderColor: colors.border, borderWidth: 1 }
+      : theme.accentSoft;
+
     return (
       <TouchableOpacity
         activeOpacity={0.8}
         onPress={() => handlePress(item)}
-        className={`mx-5 mb-3 flex-row items-start rounded-2xl border p-4 shadow-sm ${
-          item.read ? 'bg-card border-border' : 'bg-accent/5 border-accent/30'
-        }`}>
+        className="mx-6 mb-3 flex-row items-start rounded-2xl border p-4 shadow-sm"
+        style={cardStyle}>
         <View
-          className={`h-11 w-11 items-center justify-center rounded-full mr-4 ${
-            item.read ? 'bg-background border border-border' : 'bg-accent/10'
-          }`}>
-          <Feather name={icon} size={20} color={item.read ? '#64748b' : '#6366f1'} />
+          className="mr-4 h-11 w-11 items-center justify-center rounded-full"
+          style={iconWrapStyle}>
+          <Feather
+            name={icon}
+            size={20}
+            color={item.read ? colors.mutedForeground : colors.accent}
+          />
         </View>
         <View className="flex-1">
-          <View className="flex-row items-center justify-between mb-1">
-            <Text className="font-sans-bold text-primary text-base flex-1 pr-2" numberOfLines={1}>
+          <View className="mb-1 flex-row items-center justify-between">
+            <Text
+              className="flex-1 pr-2 font-sans-bold text-base"
+              style={theme.textPrimary}
+              numberOfLines={1}>
               {item.title}
             </Text>
-            {!item.read && <View className="h-2.5 w-2.5 rounded-full bg-accent" />}
+            {!item.read && (
+              <View
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: colors.accent }}
+              />
+            )}
           </View>
-          <Text className="font-sans-medium text-muted-foreground text-sm leading-5 mb-2">
+          <Text className="mb-2 font-sans-medium text-sm leading-5" style={theme.textMuted}>
             {item.body}
           </Text>
-          <Text className="font-sans-medium text-muted-foreground text-[11px]">
+          <Text className="font-sans-medium text-[11px]" style={theme.textMuted}>
             {timeAgo(item.createdAt)}
           </Text>
         </View>
@@ -125,29 +160,46 @@ export default function Notifications() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background" style={{ flex: 1 }} edges={['top']}>
-      <View className="flex-row items-center justify-between px-6 py-4 bg-background border-b border-border">
-        <View className="flex-row items-center">
-          <TouchableOpacity onPress={() => router.back()} className="mr-4 p-1">
-            <Feather name="arrow-left" size={24} color="#0b1f1a" />
-          </TouchableOpacity>
-          <Text className="text-xl font-sans-bold text-primary">Notifications</Text>
-        </View>
-        {hasUnread && (
-          <TouchableOpacity onPress={markAllRead}>
-            <Text className="text-sm font-sans-bold text-accent">Mark all read</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+    <ThemedSafeAreaView edges={['top']}>
+      <ScreenHeader
+        title="Notifications"
+        right={
+          hasUnread ? (
+            <TouchableOpacity onPress={markAllRead}>
+              <Text className="text-sm font-sans-bold" style={theme.textAccent}>
+                Mark all read
+              </Text>
+            </TouchableOpacity>
+          ) : null
+        }
+      />
+
+      <SegmentedControl
+        options={[
+          { key: 'all' as const, label: 'All' },
+          { key: 'unread' as const, label: 'Unread' },
+          { key: 'orders' as const, label: 'Orders' },
+        ]}
+        value={filter}
+        onChange={setFilter}
+      />
 
       <FlatList
         style={{ flex: 1 }}
-        data={isLoading || errorMessage ? [] : notifications}
+        extraData={`${resolved}-${filter}`}
+        data={isLoading || errorMessage ? [] : filteredNotifications}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderItem}
         contentContainerStyle={{ paddingTop: 12, paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
         ListEmptyComponent={() => {
           if (errorMessage) {
             return (
@@ -162,10 +214,21 @@ export default function Notifications() {
           }
           if (isLoading) {
             return (
-              <View className="px-5">
+              <View className="px-6">
                 <SkeletonCard />
                 <SkeletonCard />
               </View>
+            );
+          }
+          if (filter !== 'all') {
+            return (
+              <EmptyState
+                icon="filter"
+                title="Nothing here"
+                message={`No ${filter === 'unread' ? 'unread' : 'order'} notifications right now.`}
+                actionLabel="Show all"
+                onAction={() => setFilter('all')}
+              />
             );
           }
           return (
@@ -177,6 +240,6 @@ export default function Notifications() {
           );
         }}
       />
-    </SafeAreaView>
+    </ThemedSafeAreaView>
   );
 }

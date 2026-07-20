@@ -14,7 +14,9 @@
     "lint": "eslint \"**/*.{js,jsx,ts,tsx}\" && prettier -c \"**/*.{js,jsx,ts,tsx,json}\"",
     "format": "eslint \"**/*.{js,jsx,ts,tsx}\" --fix && prettier \"**/*.{js,jsx,ts,tsx,json}\" --write",
     "web": "expo start --web",
-    "build:web": "expo export -p web"
+    "build:web": "expo export -p web",
+    "build:apk": "eas build --platform android --profile preview --non-interactive",
+    "build:apk:prod": "eas build --platform android --profile production --non-interactive"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

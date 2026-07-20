@@ -10,7 +10,7 @@ const BASE_URL =
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000,
+  timeout: 60000,
 });
 
 const PUBLIC_AUTH_PATHS = [
@@ -20,14 +20,22 @@ const PUBLIC_AUTH_PATHS = [
   '/auth/reset-password',
 ];
 
+const AUTH_REQUEST_TIMEOUT_MS = 45000;
+
 function isPublicAuthRequest(url: string | undefined) {
   if (!url) return false;
   return PUBLIC_AUTH_PATHS.some((path) => url.includes(path));
 }
 
+function readTokenFromWebUrl(): string {
+  if (typeof window === 'undefined') return '';
+  return new URLSearchParams(window.location.search).get('token')?.trim() ?? '';
+}
+
 apiClient.interceptors.request.use(
   async (config) => {
     if (isPublicAuthRequest(config.url)) {
+      config.timeout = AUTH_REQUEST_TIMEOUT_MS;
       return config;
     }
     const token = await AsyncStorage.getItem('userToken');
@@ -86,4 +94,25 @@ apiClient.interceptors.response.use(
 
 export function mapBackendRole(role: string): 'artisan' | 'factory' {
   return role === 'FACTORY_SELLER' ? 'factory' : 'artisan';
+}
+
+export { readTokenFromWebUrl };
+
+/** Wake Render free-tier instances before auth flows (first request can take 30–60s). */
+export function warmBackend() {
+  return apiClient.get('/health', { timeout: AUTH_REQUEST_TIMEOUT_MS }).catch(() => undefined);
+}
+
+function readClientOrigin(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return window.location.origin;
+}
+
+export function buildForgotPasswordPayload(email: string) {
+  const payload: { email: string; clientOrigin?: string } = { email: email.trim() };
+  const origin = readClientOrigin();
+  if (origin) {
+    payload.clientOrigin = origin;
+  }
+  return payload;
 }

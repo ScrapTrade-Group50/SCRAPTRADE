@@ -1,27 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  ScrollView, 
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
   Image,
   Dimensions,
-  Alert
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import ThemedSafeAreaView from '@/components/ThemedSafeAreaView';
+import { useScreenTheme } from '@/hooks/useScreenTheme';
 import { useRouter, useLocalSearchParams, Link } from 'expo-router';
 import { apiClient } from '../../api/client';
 import { useSavedStore } from '../../store/savedStore';
+import { formatPickupLine } from '@/utils/gatePassRoute';
+import { showErrorNotice } from '@/utils/alert';
 
 const { width } = Dimensions.get('window');
 
-// 1. UPDATED: Added description and category to the type
 type Listing = {
   id: number;
   title: string;
-  description?: string; // <-- Added
-  category?: string;    // <-- Added
+  description?: string;
+  category?: string;
   weight: number;
   pricePerUnit: number;
   status: string;
@@ -29,13 +30,29 @@ type Listing = {
   dimensions: string;
   pickupLocation?: string;
   seller?: {
-    companyName: string;
+    companyName?: string;
   };
 };
 
+function DetailRow({ label, value, valueStyle }: { label: string; value: string; valueStyle?: object }) {
+  const theme = useScreenTheme();
+  return (
+    <View style={{ width: '50%', paddingRight: 12, marginBottom: 16 }}>
+      <Text className="mb-1 text-xs font-sans-semibold uppercase tracking-wider" style={theme.textMuted}>
+        {label}
+      </Text>
+      <Text className="text-lg font-sans-bold" style={valueStyle ?? theme.textPrimary}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 export default function ListingDetail() {
   const router = useRouter();
-  const { id } = useLocalSearchParams(); 
+  const theme = useScreenTheme();
+  const { colors, resolved } = theme;
+  const { id } = useLocalSearchParams();
 
   const [listing, setListing] = useState<Listing | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,7 +71,7 @@ export default function ListingDetail() {
     try {
       await toggleSaved(numericId);
     } catch {
-      Alert.alert('Error', 'Could not update your saved items. Please try again.');
+      showErrorNotice('Error', 'Could not update your saved items. Please try again.');
     }
   };
 
@@ -65,7 +82,7 @@ export default function ListingDetail() {
         setListing(response.data);
       } catch (error) {
         console.error('Failed to fetch listing details:', error);
-        Alert.alert("Error", "Could not load item details. It may have been sold or removed.");
+        showErrorNotice('Error', 'Could not load item details. It may have been sold or removed.');
         router.back();
       } finally {
         setIsLoading(false);
@@ -75,182 +92,173 @@ export default function ListingDetail() {
     if (id) fetchListingDetail();
   }, [id]);
 
+  const getStatusStyle = (status: string) => {
+    if (status === 'AVAILABLE') return { textStyle: theme.textSuccess, label: 'Available' };
+    if (status === 'PENDING_PICKUP') return { textStyle: theme.textAccent, label: 'Pending pickup' };
+    if (status === 'SOLD') return { textStyle: theme.textMuted, label: 'Sold' };
+    return { textStyle: theme.textMuted, label: status };
+  };
+
   if (isLoading) {
     return (
-      <SafeAreaView style={{ flex: 1 }} className="bg-background" edges={['top']}>
-        {/* Skeleton Back Button */}
-        <View className="absolute top-12 left-6 z-10 h-12 w-12 bg-black/10 rounded-full" />
-        
-        {/* Skeleton Image */}
-        <View className="h-80 w-full bg-slate-200 opacity-70" />
-        
-        <View className="px-6 py-6 opacity-70">
-          <View className="flex-row justify-between items-start mb-6">
-            <View className="h-6 w-20 bg-slate-200 rounded-lg" />
-            <View className="items-end gap-2">
-              <View className="h-8 w-32 bg-slate-200 rounded-lg" />
-              <View className="h-4 w-24 bg-slate-200 rounded-lg" />
-            </View>
-          </View>
-
-          <View className="h-10 w-3/4 bg-slate-200 rounded-lg mb-4" />
-          <View className="h-5 w-1/2 bg-slate-200 rounded-lg mb-8" />
-
-          <View className="h-px w-full bg-border mb-6" />
-
-          {/* NEW: Skeleton Description */}
-          <View className="h-6 w-32 bg-slate-200 rounded-lg mb-3" />
-          <View className="h-4 w-full bg-slate-200 rounded-lg mb-2" />
-          <View className="h-4 w-5/6 bg-slate-200 rounded-lg mb-8" />
-
-          {/* Skeleton Specs Grid */}
-          <View className="h-6 w-32 bg-slate-200 rounded-lg mb-6" />
-          <View className="flex-row flex-wrap gap-y-6">
-            <View className="w-1/2 pr-4 gap-2">
-              <View className="h-4 w-20 bg-slate-200 rounded-lg" />
-              <View className="h-6 w-16 bg-slate-200 rounded-lg" />
-            </View>
-            <View className="w-1/2 pr-4 gap-2">
-              <View className="h-4 w-16 bg-slate-200 rounded-lg" />
-              <View className="h-6 w-24 bg-slate-200 rounded-lg" />
-            </View>
-          </View>
+      <ThemedSafeAreaView edges={['top']}>
+        <View className="absolute left-6 top-12 z-10 h-12 w-12 rounded-full" style={theme.cardMuted} />
+        <View className="h-72 w-full" style={theme.cardMuted} />
+        <View className="gap-3 px-6 py-6 opacity-60">
+          <View className="h-6 w-24 rounded-lg" style={theme.cardMuted} />
+          <View className="h-10 w-3/4 rounded-lg" style={theme.cardMuted} />
+          <View className="h-20 w-full rounded-2xl" style={theme.cardMuted} />
         </View>
-
-        {/* Skeleton Bottom Button */}
-        <View className="absolute bottom-0 w-full px-6 py-6 bg-background border-t border-border">
-           <View className="w-full h-14 bg-slate-200 rounded-xl opacity-70" />
-        </View>
-      </SafeAreaView>
+      </ThemedSafeAreaView>
     );
   }
 
   if (!listing) return null;
 
   const totalPrice = (listing.weight * (listing.pricePerUnit || 0)).toFixed(2);
-  const factoryDisplayName = listing.seller?.companyName || 'Verified Factory';
-  const pickupLocation = listing.pickupLocation || 'Contact factory for pickup details';
-  const displayCategory = listing.category ? listing.category.toUpperCase() : "MATERIAL";
+  const sellerName = listing.seller?.companyName?.trim() || 'Verified factory';
+  const pickupLine =
+    formatPickupLine(listing.seller?.companyName, listing.pickupLocation) ||
+    listing.pickupLocation ||
+    'Contact factory for pickup details';
+  const displayCategory = listing.category ? listing.category.toUpperCase() : 'MATERIAL';
   const isAvailable = listing.status === 'AVAILABLE';
-
-  const statusDisplay = {
-    AVAILABLE: { label: 'Available', color: 'text-green-600' },
-    PENDING_PICKUP: { label: 'Pending Pickup', color: 'text-orange-600' },
-    SOLD: { label: 'Sold', color: 'text-slate-500' },
-  }[listing.status] ?? { label: listing.status, color: 'text-slate-500' };
+  const statusStyle = getStatusStyle(listing.status);
 
   return (
-    <SafeAreaView className="flex-1 bg-background" style={{ flex: 1 }} edges={['top']}>
-      
-      <View className="absolute top-12 left-6 z-10">
-        <TouchableOpacity 
-          onPress={() => router.back()} 
-          className="h-12 w-12 bg-black/40 rounded-full items-center justify-center backdrop-blur-sm"
-        >
-          <Feather name="arrow-left" size={24} color="#ffffff" />
+    <ThemedSafeAreaView edges={['top']}>
+      <View className="absolute left-5 top-12 z-20">
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="h-11 w-11 items-center justify-center rounded-full border"
+          style={{ backgroundColor: `${colors.card}E6`, borderColor: colors.border }}>
+          <Feather name="arrow-left" size={22} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
-      <View className="absolute top-12 right-6 z-10">
+      <View className="absolute right-5 top-12 z-20">
         <TouchableOpacity
           onPress={handleToggleSaved}
-          className="h-12 w-12 bg-black/40 rounded-full items-center justify-center backdrop-blur-sm"
-        >
-          <Feather name="bookmark" size={22} color={saved ? '#a5b4fc' : '#ffffff'} />
+          className="h-11 w-11 items-center justify-center rounded-full border"
+          style={{ backgroundColor: `${colors.card}E6`, borderColor: colors.border }}>
+          <Feather name="bookmark" size={20} color={saved ? colors.accent : colors.primary} />
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
-        style={{ flex: 1 }} 
+      <ScrollView
+        style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
-        contentContainerClassName="pb-32" 
-        bounces={false}
-      >
-        
-        <View className="h-80 w-full bg-slate-200 items-center justify-center">
+        contentContainerStyle={{ paddingBottom: 120 }}>
+        <View className="h-72 w-full items-center justify-center" style={theme.cardMuted}>
           {listing.imageUrl ? (
-             <Image 
-               source={{ uri: listing.imageUrl }}
-               style={{ width, height: 320 }}
-               resizeMode="cover"
-             />
+            <Image
+              source={{ uri: listing.imageUrl }}
+              style={{ width, height: 288 }}
+              resizeMode="cover"
+            />
           ) : (
-            <Feather name="image" size={48} color="#94a3b8" />
+            <Feather name="image" size={48} color={colors.mutedForeground} />
           )}
         </View>
 
-        <View className="px-6 py-6">
-          <View className="flex-row justify-between items-start mb-2">
-            <View className="bg-accent/10 px-3 py-1.5 rounded-lg">
-              {/* UPDATED: Dynamic Category Badge */}
-              <Text className="text-xs font-sans-bold text-accent tracking-widest uppercase">
+        <View className="px-6 pt-5">
+          <View className="mb-4 flex-row items-start justify-between gap-3">
+            <View className="rounded-full px-3 py-1.5" style={theme.accentSoft}>
+              <Text className="text-[11px] font-sans-bold uppercase tracking-widest" style={theme.textAccent}>
                 {displayCategory}
               </Text>
             </View>
             <View className="items-end">
-              <Text className="text-3xl font-sans-extrabold text-green-600">GHS {totalPrice}</Text>
-              <Text className="text-xs font-sans-medium text-muted-foreground">Total (GHS {listing.pricePerUnit.toFixed(2)}/kg)</Text>
+              <Text className="text-3xl font-sans-extrabold" style={theme.textSuccess}>
+                GHS {totalPrice}
+              </Text>
+              <Text className="text-xs font-sans-medium" style={theme.textMuted}>
+                GHS {listing.pricePerUnit.toFixed(2)}/kg
+              </Text>
             </View>
           </View>
 
-          <Text className="text-3xl font-sans-bold text-primary mb-2 mt-2">
+          <Text className="mb-4 text-2xl font-sans-extrabold leading-8" style={theme.textPrimary}>
             {listing.title}
           </Text>
 
-          <View className="flex-row items-center mb-8">
-            <Feather name="map-pin" size={16} color="#64748b" />
-            <Text className="text-base font-sans-medium text-muted-foreground ml-2 flex-1">
-              {factoryDisplayName} • {pickupLocation}
-            </Text>
+          <View
+            className="mb-4 flex-row items-start rounded-2xl border p-4"
+            style={{ ...theme.card, borderColor: colors.border }}>
+            <View
+              className="mr-3 h-11 w-11 items-center justify-center rounded-full"
+              style={theme.accentSoft}>
+              <Feather name="briefcase" size={18} color={colors.accent} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-[11px] font-sans-bold uppercase tracking-wider" style={theme.textMuted}>
+                Sold by
+              </Text>
+              <Text className="mt-0.5 text-base font-sans-bold" style={theme.textPrimary}>
+                {sellerName}
+              </Text>
+              <View className="mt-2 flex-row items-start">
+                <Feather name="map-pin" size={14} color={colors.mutedForeground} style={{ marginTop: 2 }} />
+                <Text className="ml-1.5 flex-1 text-sm font-sans-medium" style={theme.textMuted}>
+                  {pickupLine}
+                </Text>
+              </View>
+            </View>
           </View>
 
-          <View className="h-px w-full bg-border mb-6" />
-
-          {/* NEW: Description Section */}
           {listing.description ? (
-            <View className="mb-8">
-              <Text className="text-lg font-sans-bold text-primary mb-2">Description</Text>
-              <Text className="text-base font-sans-medium text-muted-foreground leading-relaxed">
+            <View
+              className="mb-4 rounded-2xl border p-4"
+              style={{ ...theme.card, borderColor: colors.border }}>
+              <Text className="mb-2 text-base font-sans-bold" style={theme.textPrimary}>
+                About this material
+              </Text>
+              <Text className="text-sm font-sans-medium leading-6" style={theme.textMuted}>
                 {listing.description}
               </Text>
             </View>
           ) : null}
 
-          <Text className="text-lg font-sans-bold text-primary mb-4">Specifications</Text>
-          
-          <View className="flex-row flex-wrap gap-y-6">
-            <View className="w-1/2 pr-4">
-              <Text className="text-sm font-sans-medium text-muted-foreground mb-1">Total Weight</Text>
-              <Text className="text-xl font-sans-bold text-primary">{listing.weight} kg</Text>
-            </View>
-            <View className="w-1/2 pr-4">
-              <Text className="text-sm font-sans-medium text-muted-foreground mb-1">Status</Text>
-              <Text className={`text-xl font-sans-bold ${statusDisplay.color}`}>{statusDisplay.label}</Text>
-            </View>
-            <View className="w-full">
-              <Text className="text-sm font-sans-medium text-muted-foreground mb-1">Dimensions</Text>
-              <Text className="text-xl font-sans-bold text-primary">{listing.dimensions || "Not specified"}</Text>
+          <View
+            className="rounded-2xl border p-4"
+            style={{ ...theme.card, borderColor: colors.border }}>
+            <Text className="mb-3 text-base font-sans-bold" style={theme.textPrimary}>
+              Specifications
+            </Text>
+            <View className="flex-row flex-wrap">
+              <DetailRow label="Weight" value={`${listing.weight} kg`} />
+              <DetailRow label="Status" value={statusStyle.label} valueStyle={statusStyle.textStyle} />
+              <DetailRow label="Dimensions" value={listing.dimensions || 'Not specified'} />
+              <DetailRow label="Price / kg" value={`GHS ${listing.pricePerUnit.toFixed(2)}`} valueStyle={theme.textSuccess} />
             </View>
           </View>
-
         </View>
       </ScrollView>
 
-      <View className="absolute bottom-0 w-full px-6 py-6 bg-background border-t border-border">
+      <View
+        className="absolute bottom-0 w-full px-6 py-5"
+        style={{ ...theme.bottomBar, paddingBottom: resolved === 'dark' ? 28 : 24 }}>
         {isAvailable ? (
           <Link href={`/(artisan)/checkout?id=${listing.id}`} asChild>
-            <TouchableOpacity className="w-full items-center rounded-xl bg-primary py-4 shadow-sm flex-row justify-center gap-3">
-              <Feather name="shopping-bag" size={20} color="#ffffff" />
-              <Text className="text-lg font-sans-bold text-white">Checkout with MoMo</Text>
+            <TouchableOpacity
+              className="w-full flex-row items-center justify-center gap-2 rounded-2xl py-4"
+              style={theme.accentFill}>
+              <Feather name="shopping-bag" size={20} color={colors.onAccent} />
+              <Text className="text-base font-sans-bold" style={theme.textOnAccent}>
+                Checkout with MoMo
+              </Text>
             </TouchableOpacity>
           </Link>
         ) : (
-          <View className="w-full items-center rounded-xl bg-muted py-4 border border-border">
-            <Text className="text-lg font-sans-bold text-muted-foreground">Not Available</Text>
+          <View
+            className="w-full items-center rounded-2xl border py-4"
+            style={{ ...theme.cardMuted, borderColor: colors.border }}>
+            <Text className="text-base font-sans-bold" style={theme.textMuted}>
+              Not available
+            </Text>
           </View>
         )}
       </View>
-
-    </SafeAreaView>
+    </ThemedSafeAreaView>
   );
 }

@@ -40,7 +40,7 @@ public class PasswordResetService {
         this.webResetUrl = webResetUrl == null ? "" : webResetUrl.trim();
     }
 
-    public Map<String, Object> requestReset(String email) {
+    public Map<String, Object> requestReset(String email, String clientOrigin) {
         User user = userRepository.findByEmail(email);
 
         Map<String, Object> response = new HashMap<>();
@@ -55,37 +55,64 @@ public class PasswordResetService {
         user.setResetTokenExpiresAt(LocalDateTime.now().plusHours(TOKEN_EXPIRY_HOURS));
         userRepository.save(user);
 
+        String resetBaseUrl = resolveResetBaseUrl(clientOrigin);
+
         if (exposeTokenInResponse) {
             response.put("resetToken", token);
-            response.put("message", "Reset token generated (dev mode). Use it on the reset password screen.");
+            if (!resetBaseUrl.isBlank()) {
+                response.put("resetLink", buildResetLink(token, resetBaseUrl));
+            }
+            response.put("message", "Reset token generated. Use the link below to set your password.");
             return response;
         }
 
-        if (webResetUrl.isBlank()) {
+        if (resetBaseUrl.isBlank()) {
             log.error(
-                    "Password reset requested for {} but app.password-reset.web-reset-url is not configured.",
+                    "Password reset requested for {} but no web reset URL is configured.",
                     email);
             return response;
         }
+
+        String resetLink = buildResetLink(token, resetBaseUrl);
 
         if (!emailService.isEnabled()) {
-            log.error(
-                    "Password reset requested for {} but mail is disabled (app.mail.enabled=false).",
-                    email);
+            log.warn("Mail disabled — returning reset link in API response for {}", email);
+            response.put("resetLink", resetLink);
+            response.put(
+                    "message",
+                    "Email is not configured yet. Use the reset link below to set your password.");
             return response;
         }
 
-        String resetLink = buildResetLink(token);
-        emailService.sendPasswordResetEmail(user.getEmail(), resetLink);
+        boolean sent = emailService.sendPasswordResetEmail(user.getEmail(), resetLink);
+        if (!sent) {
+            log.warn("Password reset email failed — returning reset link in API response for {}", email);
+            response.put("resetLink", resetLink);
+            response.put(
+                    "message",
+                    "We could not send email right now. Use the reset link below to set your password.");
+            return response;
+        }
+
         return response;
     }
 
-    private String buildResetLink(String token) {
-        String encodedToken = URLEncoder.encode(token, StandardCharsets.UTF_8);
-        if (webResetUrl.contains("?")) {
-            return webResetUrl + "&token=" + encodedToken;
+    private String resolveResetBaseUrl(String clientOrigin) {
+        if (clientOrigin != null && !clientOrigin.isBlank()) {
+            String origin = clientOrigin.trim().replaceAll("/+$", "");
+            if (origin.startsWith("http://") || origin.startsWith("https://")) {
+                return origin + "/reset-password";
+            }
         }
-        return webResetUrl + "?token=" + encodedToken;
+        return webResetUrl;
+    }
+
+    private String buildResetLink(String token, String baseUrl) {
+        String encodedToken = URLEncoder.encode(token, StandardCharsets.UTF_8);
+        if (baseUrl.contains("?")) {
+            return baseUrl + "&token=" + encodedToken;
+        }
+        return baseUrl + "?token=" + encodedToken;
     }
 
     public void resetPassword(String token, String newPassword) {

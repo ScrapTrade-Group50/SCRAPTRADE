@@ -1,5 +1,6 @@
 package com.scraptrade.scraptrade_backend.controller;
 
+import com.scraptrade.scraptrade_backend.dto.OrderSummaryDto;
 import com.scraptrade.scraptrade_backend.exception.PaystackApiException;
 import com.scraptrade.scraptrade_backend.model.Listing;
 import com.scraptrade.scraptrade_backend.model.Order;
@@ -348,19 +349,25 @@ public class OrderController {
     }
 
     @GetMapping("/my-orders")
-    public ResponseEntity<List<Order>> getMyOrders(Authentication authentication) {
+    public ResponseEntity<List<OrderSummaryDto>> getMyOrders(Authentication authentication) {
         User buyer = requireUser(authentication);
-        return ResponseEntity.ok(orderRepository.findByBuyer(buyer));
+        List<OrderSummaryDto> orders = orderRepository.findByBuyerWithDetails(buyer).stream()
+                .map(order -> OrderSummaryDto.fromOrder(order, false))
+                .toList();
+        return ResponseEntity.ok(orders);
     }
 
     @GetMapping("/my-sales")
-    public ResponseEntity<List<Order>> getMySales(Authentication authentication) {
+    public ResponseEntity<List<OrderSummaryDto>> getMySales(Authentication authentication) {
         User seller = requireUser(authentication);
 
         if (seller.getRole() != User.Role.FACTORY_SELLER) {
             throw new SecurityException("Only factory sellers can view sales history.");
         }
 
-        return ResponseEntity.ok(orderRepository.findByListingSeller(seller));
+        List<OrderSummaryDto> sales = orderRepository.findByListingSellerWithDetails(seller).stream()
+                .map(order -> OrderSummaryDto.fromOrder(order, true))
+                .toList();
+        return ResponseEntity.ok(sales);
     }
 }

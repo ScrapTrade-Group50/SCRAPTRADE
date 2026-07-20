@@ -1,8 +1,11 @@
 package com.scraptrade.scraptrade_backend.controller;
 
+import com.scraptrade.scraptrade_backend.model.Listing;
 import com.scraptrade.scraptrade_backend.model.User;
 import com.scraptrade.scraptrade_backend.repository.AppNotificationRepository;
+import com.scraptrade.scraptrade_backend.repository.ListingRepository;
 import com.scraptrade.scraptrade_backend.repository.MomoWalletRepository;
+import com.scraptrade.scraptrade_backend.repository.OrderRepository;
 import com.scraptrade.scraptrade_backend.repository.SavedListingRepository;
 import com.scraptrade.scraptrade_backend.repository.UserRepository;
 import com.scraptrade.scraptrade_backend.repository.WarehouseLocationRepository;
@@ -15,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -29,6 +33,8 @@ public class AuthController {
     private final MomoWalletRepository momoWalletRepository;
     private final WarehouseLocationRepository warehouseLocationRepository;
     private final AppNotificationRepository notificationRepository;
+    private final ListingRepository listingRepository;
+    private final OrderRepository orderRepository;
 
     public AuthController(
             UserRepository userRepository,
@@ -38,7 +44,9 @@ public class AuthController {
             SavedListingRepository savedListingRepository,
             MomoWalletRepository momoWalletRepository,
             WarehouseLocationRepository warehouseLocationRepository,
-            AppNotificationRepository notificationRepository) {
+            AppNotificationRepository notificationRepository,
+            ListingRepository listingRepository,
+            OrderRepository orderRepository) {
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
         this.passwordEncoder = passwordEncoder;
@@ -47,6 +55,8 @@ public class AuthController {
         this.momoWalletRepository = momoWalletRepository;
         this.warehouseLocationRepository = warehouseLocationRepository;
         this.notificationRepository = notificationRepository;
+        this.listingRepository = listingRepository;
+        this.orderRepository = orderRepository;
     }
 
     private Map<String, Object> userProfile(User user) {
@@ -59,15 +69,44 @@ public class AuthController {
         return profile;
     }
 
+    private boolean isPasswordConfigured(User user) {
+        String hash = user.getPasswordHash();
+        return hash != null && !hash.isBlank() && hash.startsWith("$2");
+    }
+
     @PostMapping("/login")
     public Map<String, Object> login(@RequestBody Map<String, String> credentials) {
         String email = credentials.get("email");
         String password = credentials.get("password");
 
-        User user = userRepository.findByEmail(email);
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Email is required.");
+        }
+        if (password == null || password.isBlank()) {
+            throw new IllegalArgumentException("Password is required.");
+        }
 
-        if (user != null && passwordEncoder.matches(password, user.getPasswordHash())) {
-            String token = jwtUtil.generateToken(email);
+        User user = userRepository.findByEmail(email.trim());
+
+        if (user == null) {
+            throw new IllegalArgumentException("Invalid email or password!");
+        }
+
+        if (!isPasswordConfigured(user)) {
+            throw new IllegalStateException(
+                    "This account does not have a password yet. Use Forgot password to create one.");
+        }
+
+        boolean matches;
+        try {
+            matches = passwordEncoder.matches(password, user.getPasswordHash());
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalStateException(
+                    "This account does not have a password yet. Use Forgot password to create one.");
+        }
+
+        if (matches) {
+            String token = jwtUtil.generateToken(user.getEmail());
             Map<String, Object> response = new HashMap<>(userProfile(user));
             response.put("message", "Login successful!");
             response.put("token", token);
@@ -88,7 +127,14 @@ public class AuthController {
             throw new IllegalArgumentException("Email, password, and role are required.");
         }
 
-        if (userRepository.findByEmail(email) != null) {
+        if (email.isBlank()) {
+            throw new IllegalArgumentException("Email is required.");
+        }
+        if (password.isBlank() || password.length() < 6) {
+            throw new IllegalArgumentException("Password must be at least 6 characters.");
+        }
+
+        if (userRepository.findByEmail(email.trim()) != null) {
             throw new IllegalStateException("An account with this email already exists.");
         }
 
@@ -100,7 +146,7 @@ public class AuthController {
         }
 
         User user = new User();
-        user.setEmail(email);
+        user.setEmail(email.trim());
         user.setPasswordHash(passwordEncoder.encode(password));
         user.setRole(role);
         user.setCompanyName(companyName != null ? companyName : email);
@@ -151,7 +197,7 @@ public class AuthController {
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("Email is required.");
         }
-        return passwordResetService.requestReset(email.trim());
+        return passwordResetService.requestReset(email.trim(), body.get("clientOrigin"));
     }
 
     @PostMapping("/reset-password")
@@ -206,13 +252,21 @@ public class AuthController {
         momoWalletRepository.deleteByUser(user);
         warehouseLocationRepository.deleteByUser(user);
 
+        orderRepository.deleteByBuyer(user);
+
+        List<Listing> sellerListings = listingRepository.findBySeller(user);
+        for (Listing listing : sellerListings) {
+            orderRepository.deleteByListing(listing);
+            savedListingRepository.deleteByListing(listing);
+            listingRepository.delete(listing);
+        }
+
         try {
             userRepository.delete(user);
             userRepository.flush();
         } catch (DataIntegrityViolationException e) {
             throw new IllegalStateException(
-                    "Cannot delete an account that still has active listings or orders. "
-                            + "Please resolve them before deleting your account.");
+                    "Could not delete your account right now. Please try again in a moment.");
         }
 
         return Map.of("message", "Your account has been deleted.");

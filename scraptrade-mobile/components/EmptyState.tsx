@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useScreenTheme } from '@/hooks/useScreenTheme';
 
 type EmptyStateProps = {
   icon: keyof typeof Feather.glyphMap;
@@ -11,26 +12,33 @@ type EmptyStateProps = {
 };
 
 export default function EmptyState({ icon, title, message, actionLabel, onAction }: EmptyStateProps) {
+  const theme = useScreenTheme();
+  const { colors } = theme;
+
   return (
-    <View className="flex-1 items-center justify-center py-12 px-6">
-      <View className="h-24 w-24 bg-slate-100 rounded-full items-center justify-center mb-6">
-        <Feather name={icon} size={40} color="#94a3b8" />
+    <View className="flex-1 items-center justify-center px-6 py-12">
+      <View
+        className="mb-6 h-24 w-24 items-center justify-center rounded-full"
+        style={theme.cardMuted}>
+        <Feather name={icon} size={40} color={colors.mutedForeground} />
       </View>
-      
-      <Text className="text-xl font-bold text-slate-900 mb-2 text-center">
+
+      <Text className="mb-2 text-center text-xl font-sans-bold" style={theme.textPrimary}>
         {title}
       </Text>
-      
-      <Text className="text-base font-medium text-slate-500 text-center mb-8">
+
+      <Text className="mb-8 text-center text-base font-sans-medium" style={theme.textMuted}>
         {message}
       </Text>
 
       {actionLabel && onAction && (
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={onAction}
-          className="bg-orange-50 px-6 py-3 rounded-xl border border-orange-200"
-        >
-          <Text className="text-sm font-bold text-orange-600">{actionLabel}</Text>
+          className="rounded-xl border px-6 py-3"
+          style={theme.accentSoft}>
+          <Text className="text-sm font-sans-bold" style={theme.textAccent}>
+            {actionLabel}
+          </Text>
         </TouchableOpacity>
       )}
     </View>

@@ -25,11 +25,11 @@
     },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0b1f1a"
+      "backgroundColor": "#09090B"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
@@ -40,13 +40,13 @@
       "package": "com.scraptrade.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0b1f1a"
+        "backgroundColor": "#09090B"
       }
     },
     "extra": {
-      "apiUrl": "http://localhost:8080/api",
+      "apiUrl": "https://scraptrade-iupe.onrender.com/api",
       "eas": {
-        "projectId": "replace-with-eas-project-id"
+        "projectId": "3bfb36ef-6f6b-449a-b8cd-c9bebce8579e"
       }
     }
   }

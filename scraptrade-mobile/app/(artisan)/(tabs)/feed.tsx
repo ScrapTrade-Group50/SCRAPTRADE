@@ -1,40 +1,31 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  Image,
-  Modal,
-  Pressable,
-  StatusBar,
-  RefreshControl,
-  ScrollView,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, TouchableOpacity, FlatList, Image, RefreshControl } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import Slider from '@react-native-community/slider';
+import ThemedSafeAreaView from '@/components/ThemedSafeAreaView';
+import { useScreenTheme } from '@/hooks/useScreenTheme';
 import { Link, useFocusEffect } from 'expo-router';
 import { apiClient } from '@/api/client';
+import { getApiErrorMessage } from '@/utils/apiErrors';
 import SkeletonCard from '@/components/SkeletonCard';
 import EmptyState from '@/components/EmptyState';
 import NotificationBell from '@/components/NotificationBell';
+import PageHeader from '@/components/PageHeader';
+import SearchFilterBar from '@/components/SearchFilterBar';
+import ListingFilterSheet, {
+  type ListingCategoryFilter,
+  type ListingSortKey,
+} from '@/components/ListingFilterSheet';
 import { useSavedStore } from '@/store/savedStore';
+import { matchesListingSearch, type ListingCard } from '@/utils/listingSort';
 
-type Listing = {
-  id: number;
-  title: string;
-  category?: string;
-  weight: number;
-  pricePerUnit: number;
-  status: string;
-  imageUrl: string | null;
-  dimensions: string;
-  pickupLocation?: string;
-};
+type Listing = ListingCard;
+
+const PRICE_LIMIT = 5000;
 
 export default function ArtisanFeed() {
+  const theme = useScreenTheme();
+  const { colors, resolved } = theme;
+
   const [listings, setListings] = useState<Listing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -42,18 +33,9 @@ export default function ArtisanFeed() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterVisible, setFilterVisible] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  // Slider max doubles as "no limit" so high-value listings aren't hidden by default.
-  const PRICE_LIMIT = 5000;
   const [maxPrice, setMaxPrice] = useState(PRICE_LIMIT);
-
-  type SortKey = 'newest' | 'price_asc' | 'price_desc';
-  const [sortBy, setSortBy] = useState<SortKey>('newest');
-  const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-    { key: 'newest', label: 'Newest' },
-    { key: 'price_asc', label: 'Price: Low to High' },
-    { key: 'price_desc', label: 'Price: High to Low' },
-  ];
+  const [sortBy, setSortBy] = useState<ListingSortKey>('newest');
+  const [categoryFilter, setCategoryFilter] = useState<ListingCategoryFilter>('ALL');
 
   const savedIds = useSavedStore((state) => state.ids);
   const fetchSavedIds = useSavedStore((state) => state.fetchIds);
@@ -65,9 +47,9 @@ export default function ArtisanFeed() {
       const response = await apiClient.get('/listings');
       const availableItems = response.data.filter((item: Listing) => item.status === 'AVAILABLE');
       setListings(availableItems);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to fetch feed:', error);
-      setErrorMessage(error.response?.data?.message || 'Could not connect to server');
+      setErrorMessage(getApiErrorMessage(error, 'Could not connect to server'));
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -93,43 +75,48 @@ export default function ArtisanFeed() {
     const totalOf = (item: Listing) => (item.pricePerUnit ?? 0) * (item.weight ?? 0);
 
     const filtered = listings.filter((item) => {
-      const matchesSearch =
-        !searchQuery ||
-        item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (item.category?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
-
+      const matchesSearch = matchesListingSearch(item, searchQuery);
       const matchesCategory =
-        !selectedCategory || item.category?.toUpperCase() === selectedCategory;
-
+        categoryFilter === 'ALL' || item.category?.toUpperCase() === categoryFilter;
       const matchesPrice = maxPrice >= PRICE_LIMIT || totalOf(item) <= maxPrice;
-
       return matchesSearch && matchesCategory && matchesPrice;
     });
 
     return filtered.sort((a, b) => {
       if (sortBy === 'price_asc') return totalOf(a) - totalOf(b);
       if (sortBy === 'price_desc') return totalOf(b) - totalOf(a);
-      // 'newest' — higher id first (most recently created)
       return b.id - a.id;
     });
-  }, [listings, searchQuery, selectedCategory, maxPrice, sortBy]);
+  }, [listings, searchQuery, categoryFilter, maxPrice, sortBy]);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchListings();
   };
 
+  const hasActiveFilters =
+    categoryFilter !== 'ALL' || maxPrice < PRICE_LIMIT || sortBy !== 'newest';
+
+  const clearFilters = () => {
+    setCategoryFilter('ALL');
+    setMaxPrice(PRICE_LIMIT);
+    setSortBy('newest');
+  };
+
   const renderScrapCard = ({ item }: { item: Listing }) => {
     const displayCategory = item.category ? item.category.toUpperCase() : 'MATERIAL';
     const totalPrice = (item.pricePerUnit ?? 0) * (item.weight ?? 0);
     const saved = savedIds.includes(item.id);
+    const sellerName = item.seller?.companyName?.trim();
+    const pickupLine = item.pickupLocation?.trim();
 
     return (
-      <View className="relative mx-5 mb-4">
+      <View className="relative mx-5 mb-3">
         <Link href={`/(artisan)/listing-detail?id=${item.id}`} asChild>
           <TouchableOpacity
-            activeOpacity={0.8}
-            className="bg-card border-border flex-row items-center rounded-2xl border p-3 shadow-sm">
+            activeOpacity={0.85}
+            className="flex-row items-center rounded-2xl border p-3"
+            style={theme.card}>
             <View className="relative">
               {item.imageUrl ? (
                 <Image
@@ -138,30 +125,34 @@ export default function ArtisanFeed() {
                   resizeMode="cover"
                 />
               ) : (
-                <View className="h-24 w-24 items-center justify-center rounded-xl bg-muted">
-                  <Feather name="image" size={28} color="#94a3b8" />
+                <View className="h-24 w-24 items-center justify-center rounded-xl" style={theme.cardMuted}>
+                  <Feather name="image" size={28} color={colors.mutedForeground} />
                 </View>
               )}
             </View>
 
             <View className="ml-4 flex-1 justify-center self-stretch py-1">
-              <View className="flex-row items-center justify-between mb-1">
-                <Text className="font-sans-bold text-accent text-[10px] tracking-wider uppercase">
-                  {displayCategory}
-                </Text>
-              </View>
+              <Text className="mb-1 text-[10px] font-sans-bold uppercase tracking-wider" style={theme.textAccent}>
+                {displayCategory}
+              </Text>
 
-              <Text className="font-sans-bold text-primary mb-1 text-base pr-8" numberOfLines={1}>
+              <Text className="mb-1 pr-8 text-base font-sans-bold" style={theme.textPrimary} numberOfLines={1}>
                 {item.title}
               </Text>
-              <Text className="font-sans-medium text-muted-foreground mb-2 text-xs" numberOfLines={1}>
-                {item.weight} kg • {item.pickupLocation || item.dimensions || 'Specs TBA'}
+              {sellerName ? (
+                <Text className="mb-0.5 text-xs font-sans-semibold" style={theme.textAccent} numberOfLines={1}>
+                  Sold by {sellerName}
+                </Text>
+              ) : null}
+              <Text className="mb-2 text-xs font-sans-medium" style={theme.textMuted} numberOfLines={1}>
+                {item.weight} kg
+                {pickupLine ? ` • ${pickupLine}` : item.dimensions ? ` • ${item.dimensions}` : ''}
               </Text>
 
-              <Text className="font-sans-extrabold text-lg text-green-600 mt-auto">
+              <Text className="mt-auto text-lg font-sans-extrabold" style={theme.textSuccess}>
                 GHS {totalPrice.toFixed(2)}
               </Text>
-              <Text className="font-sans-medium text-muted-foreground text-[10px]">
+              <Text className="text-[10px] font-sans-medium" style={theme.textMuted}>
                 GHS {(item.pricePerUnit ?? 0).toFixed(2)}/kg
               </Text>
             </View>
@@ -171,11 +162,12 @@ export default function ArtisanFeed() {
         <TouchableOpacity
           onPress={() => handleToggleSaved(item.id)}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          className="absolute right-3 top-3 h-9 w-9 items-center justify-center rounded-full bg-background/90 border border-border">
+          className="absolute right-3 top-3 h-9 w-9 items-center justify-center rounded-full border"
+          style={{ backgroundColor: `${colors.background}E6`, borderColor: colors.border }}>
           <Feather
             name="bookmark"
             size={18}
-            color={saved ? '#6366f1' : '#94a3b8'}
+            color={saved ? colors.accent : colors.mutedForeground}
           />
         </TouchableOpacity>
       </View>
@@ -183,47 +175,43 @@ export default function ArtisanFeed() {
   };
 
   const FeedHeader = () => (
-    <View className="px-5 pt-4 pb-4 bg-background z-10">
-      <View className="flex-row items-center justify-between mb-4">
-        <Text className="text-2xl font-sans-extrabold text-primary">Discover Materials</Text>
-        <NotificationBell />
-      </View>
+    <View className="z-10 pb-2">
+      <PageHeader
+        title="Discover"
+        subtitle="Verified factory off-cuts"
+        right={<NotificationBell />}
+      />
 
-      <View className="flex-row gap-3">
-        <View className="flex-1 flex-row items-center bg-card border border-border rounded-2xl px-4 h-14 shadow-sm">
-          <Feather name="search" size={20} color="#64748b" />
-          <TextInput
-            className="flex-1 ml-3 text-base font-sans-medium text-primary h-full"
-            placeholder="Search off-cuts..."
-            placeholderTextColor="#64748b"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={() => setFilterVisible(true)}
-          className="w-14 h-14 bg-accent items-center justify-center rounded-2xl shadow-sm">
-          <Feather name="sliders" size={22} color="#ffffff" />
-        </TouchableOpacity>
-      </View>
+      <SearchFilterBar
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="Search title, factory, location..."
+        onFilterPress={() => setFilterVisible(true)}
+        filtersActive={hasActiveFilters}
+      />
     </View>
   );
 
   return (
-    <SafeAreaView style={{ flex: 1 }} className="bg-background" edges={['top']}>
-      <StatusBar barStyle="dark-content" />
+    <ThemedSafeAreaView edges={['top']}>
       <FeedHeader />
 
       <FlatList
         style={{ flex: 1 }}
+        extraData={`${resolved}-${sortBy}-${categoryFilter}-${maxPrice}`}
         data={isLoading || errorMessage ? [] : filteredListings}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderScrapCard}
         contentContainerStyle={{ paddingBottom: 100, paddingTop: 8 }}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+            colors={[colors.accent]}
+          />
+        }
         ListEmptyComponent={() => {
           if (errorMessage) {
             return (
@@ -246,11 +234,25 @@ export default function ArtisanFeed() {
               </View>
             );
           }
+          if (hasActiveFilters || searchQuery) {
+            return (
+              <EmptyState
+                icon="filter"
+                title="No Materials Found"
+                message="Nothing matches your search or filters."
+                actionLabel="Clear filters"
+                onAction={() => {
+                  clearFilters();
+                  setSearchQuery('');
+                }}
+              />
+            );
+          }
           return (
             <EmptyState
               icon="inbox"
               title="No Materials Found"
-              message="There are no materials matching your search. Try adjusting your filters."
+              message="There are no available materials right now."
               actionLabel="Refresh Feed"
               onAction={fetchListings}
             />
@@ -258,106 +260,18 @@ export default function ArtisanFeed() {
         }}
       />
 
-      <Modal
-        animationType="slide"
-        transparent
+      <ListingFilterSheet
         visible={isFilterVisible}
-        onRequestClose={() => setFilterVisible(false)}>
-        <View className="flex-1 justify-end bg-black/50">
-          <Pressable className="absolute inset-0" onPress={() => setFilterVisible(false)} />
-
-          <View className="bg-background h-[80%] rounded-t-[32px] mt-auto shadow-2xl">
-            <View className="items-center pt-3 pb-2">
-              <View className="w-12 h-1.5 bg-border rounded-full" />
-            </View>
-
-            <View className="flex-row justify-between items-center px-6 py-4 border-b border-border">
-              <Text className="text-2xl font-sans-bold text-primary">Filters</Text>
-              <TouchableOpacity
-                onPress={() => setFilterVisible(false)}
-                className="h-10 w-10 items-center justify-center rounded-full bg-muted">
-                <Feather name="x" size={20} color="#081126" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              className="flex-1"
-              contentContainerClassName="px-6 py-6 gap-8"
-              showsVerticalScrollIndicator={false}>
-              <View>
-                <Text className="text-base font-sans-bold text-primary mb-4">Sort By</Text>
-                <View className="gap-3">
-                  {SORT_OPTIONS.map((option) => {
-                    const active = sortBy === option.key;
-                    return (
-                      <TouchableOpacity
-                        key={option.key}
-                        onPress={() => setSortBy(option.key)}
-                        className={`flex-row items-center justify-between px-4 py-3 rounded-2xl border-2 ${
-                          active ? 'border-accent bg-accent/10' : 'border-border bg-card'
-                        }`}>
-                        <Text
-                          className={`font-sans-bold ${active ? 'text-accent' : 'text-muted-foreground'}`}>
-                          {option.label}
-                        </Text>
-                        {active && <Feather name="check" size={18} color="#6366f1" />}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              <View>
-                <Text className="text-base font-sans-bold text-primary mb-4">Material Category</Text>
-                <View className="flex-row flex-wrap gap-3">
-                  {['METAL', 'WOOD', 'TEXTILE'].map((cat) => (
-                    <TouchableOpacity
-                      key={cat}
-                      onPress={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
-                      className={`px-6 py-3 rounded-2xl border-2 ${
-                        selectedCategory === cat ? 'border-accent bg-accent/10' : 'border-border bg-card'
-                      }`}>
-                      <Text
-                        className={`font-sans-bold ${selectedCategory === cat ? 'text-accent' : 'text-muted-foreground'}`}>
-                        {cat}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              <View>
-                <View className="flex-row justify-between items-center mb-4">
-                  <Text className="text-base font-sans-bold text-primary">Max Total Price (GHS)</Text>
-                  <Text className="text-lg font-sans-bold text-accent">
-                    {maxPrice >= PRICE_LIMIT ? 'Any' : `${maxPrice} GHS`}
-                  </Text>
-                </View>
-                <Slider
-                  style={{ width: '100%', height: 40 }}
-                  minimumValue={10}
-                  maximumValue={PRICE_LIMIT}
-                  step={10}
-                  value={maxPrice}
-                  onValueChange={setMaxPrice}
-                  minimumTrackTintColor="#6366f1"
-                  maximumTrackTintColor="rgba(0, 0, 0, 0.1)"
-                  thumbTintColor="#6366f1"
-                />
-              </View>
-            </ScrollView>
-
-            <View className="px-6 pb-10 pt-4 border-t border-border bg-card">
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => setFilterVisible(false)}
-                className="w-full items-center justify-center rounded-2xl bg-accent h-14 shadow-sm">
-                <Text className="text-lg font-sans-bold text-white">Apply Filters</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+        onClose={() => setFilterVisible(false)}
+        sortBy={sortBy}
+        onSortChange={setSortBy}
+        categoryFilter={categoryFilter}
+        onCategoryChange={setCategoryFilter}
+        maxPrice={maxPrice}
+        onMaxPriceChange={setMaxPrice}
+        priceLimit={PRICE_LIMIT}
+        onReset={clearFilters}
+      />
+    </ThemedSafeAreaView>
   );
 }

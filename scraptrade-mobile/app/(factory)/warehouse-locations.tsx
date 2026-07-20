@@ -5,16 +5,26 @@ import {
   TouchableOpacity,
   ScrollView,
   Modal,
-  TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { apiClient } from '../../api/client';
 import { showAlert } from '../../utils/alert';
+import ScreenHeader from '@/components/ScreenHeader';
+import ThemedSafeAreaView from '@/components/ThemedSafeAreaView';
+import { useScreenTheme } from '@/hooks/useScreenTheme';
+import { Button, TextField } from '@/components/ui';
+import {
+  validateRequiredText,
+  validateOptionalText,
+  type FieldErrors,
+  hasErrors,
+} from '@/utils/validation';
+
+type LocationFields = 'name' | 'address';
 
 type WarehouseLocation = {
   id: number;
@@ -24,7 +34,8 @@ type WarehouseLocation = {
 };
 
 export default function WarehouseLocations() {
-  const router = useRouter();
+  const theme = useScreenTheme();
+  const { colors } = theme;
   const [locations, setLocations] = useState<WarehouseLocation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -33,6 +44,7 @@ export default function WarehouseLocations() {
   const [editing, setEditing] = useState<WarehouseLocation | null>(null);
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
+  const [errors, setErrors] = useState<FieldErrors<LocationFields>>({});
 
   const fetchLocations = async () => {
     try {
@@ -55,6 +67,7 @@ export default function WarehouseLocations() {
     setEditing(null);
     setName('');
     setAddress('');
+    setErrors({});
     setModalVisible(true);
   };
 
@@ -62,14 +75,21 @@ export default function WarehouseLocations() {
     setEditing(location);
     setName(location.name ?? '');
     setAddress(location.address ?? '');
+    setErrors({});
     setModalVisible(true);
   };
 
+  const validate = () => {
+    const next: FieldErrors<LocationFields> = {
+      name: validateRequiredText(name, 'Warehouse name', { min: 2 }) ?? undefined,
+      address: validateOptionalText(address, 'Address', { max: 120 }) ?? undefined,
+    };
+    setErrors(next);
+    return !hasErrors(next);
+  };
+
   const handleSave = async () => {
-    if (!name.trim()) {
-      showAlert('Required', 'Please enter a warehouse name.');
-      return;
-    }
+    if (!validate()) return;
     setIsSaving(true);
     try {
       const payload = { name: name.trim(), address: address.trim() };
@@ -116,34 +136,33 @@ export default function WarehouseLocations() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background" style={{ flex: 1 }} edges={['top']}>
-      <View className="flex-row items-center px-6 py-4 bg-background border-b border-border">
-        <TouchableOpacity onPress={() => router.back()} className="mr-4 p-1">
-          <Feather name="arrow-left" size={24} color="#0b1f1a" />
-        </TouchableOpacity>
-        <Text className="text-xl font-sans-bold text-primary">Warehouses</Text>
-      </View>
+    <ThemedSafeAreaView edges={['top']}>
+      <ScreenHeader title="Warehouses" />
 
       {isLoading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#6366f1" />
+          <ActivityIndicator size="large" color={colors.accent} />
         </View>
       ) : (
         <ScrollView
           style={{ flex: 1 }}
           contentContainerClassName="px-6 pt-6 pb-12"
           showsVerticalScrollIndicator={false}>
-          <Text className="text-sm font-sans-medium text-muted-foreground mb-6">
+          <Text className="mb-6 text-sm font-sans-medium" style={theme.textMuted}>
             Manage the locations where buyers can pick up scrap materials.
           </Text>
 
           {locations.length === 0 ? (
             <View className="items-center py-12">
-              <View className="h-16 w-16 bg-accent/10 rounded-full items-center justify-center mb-4">
-                <Feather name="map-pin" size={28} color="#6366f1" />
+              <View
+                className="mb-4 h-16 w-16 items-center justify-center rounded-full"
+                style={theme.accentSoft}>
+                <Feather name="map-pin" size={28} color={colors.accent} />
               </View>
-              <Text className="text-base font-sans-bold text-primary mb-1">No locations yet</Text>
-              <Text className="text-sm font-sans-medium text-muted-foreground text-center">
+              <Text className="mb-1 text-base font-sans-bold" style={theme.textPrimary}>
+                No locations yet
+              </Text>
+              <Text className="text-center text-sm font-sans-medium" style={theme.textMuted}>
                 Add a warehouse so buyers know where to collect.
               </Text>
             </View>
@@ -151,34 +170,47 @@ export default function WarehouseLocations() {
             locations.map((location) => (
               <View
                 key={location.id}
-                className="bg-card border border-border rounded-2xl p-5 mb-4 shadow-sm relative overflow-hidden">
+                className="relative mb-4 overflow-hidden rounded-2xl border p-5 shadow-sm"
+                style={theme.card}>
                 {location.isPrimary && (
-                  <View className="absolute top-0 right-0 bg-accent/10 px-3 py-1 rounded-bl-xl border-b border-l border-accent/20">
-                    <Text className="text-xs font-sans-bold text-accent">PRIMARY HQ</Text>
+                  <View
+                    className="absolute right-0 top-0 rounded-bl-xl border-b border-l px-3 py-1"
+                    style={theme.accentSoft}>
+                    <Text className="text-xs font-sans-bold" style={theme.textAccent}>
+                      PRIMARY HQ
+                    </Text>
                   </View>
                 )}
 
-                <View className="flex-row items-start mb-4 pt-1">
-                  <View className="h-10 w-10 bg-background rounded-full items-center justify-center mr-3 border border-border">
-                    <Feather name="map" size={18} color="#0b1f1a" />
+                <View className="mb-4 flex-row items-start pt-1">
+                  <View
+                    className="mr-3 h-10 w-10 items-center justify-center rounded-full border"
+                    style={{ backgroundColor: colors.background, borderColor: colors.border }}>
+                    <Feather name="map" size={18} color={colors.primary} />
                   </View>
                   <View className="flex-1 pr-16">
-                    <Text className="text-lg font-sans-bold text-primary">{location.name}</Text>
+                    <Text className="text-lg font-sans-bold" style={theme.textPrimary}>
+                      {location.name}
+                    </Text>
                     {location.address ? (
-                      <Text className="text-base font-sans-medium text-muted-foreground mt-1 leading-5">
+                      <Text className="mt-1 text-base font-sans-medium leading-5" style={theme.textMuted}>
                         {location.address}
                       </Text>
                     ) : null}
                   </View>
                 </View>
 
-                <View className="flex-row items-center justify-between pt-4 border-t border-border">
+                <View
+                  className="flex-row items-center justify-between border-t pt-4"
+                  style={{ borderTopColor: colors.border }}>
                   {!location.isPrimary ? (
                     <TouchableOpacity
                       className="flex-row items-center"
                       onPress={() => handleSetPrimary(location)}>
-                      <Feather name="star" size={16} color="#6366f1" />
-                      <Text className="text-sm font-sans-bold text-accent ml-2">Set primary</Text>
+                      <Feather name="star" size={16} color={colors.accent} />
+                      <Text className="ml-2 text-sm font-sans-bold" style={theme.textAccent}>
+                        Set primary
+                      </Text>
                     </TouchableOpacity>
                   ) : (
                     <View />
@@ -186,16 +218,22 @@ export default function WarehouseLocations() {
 
                   <View className="flex-row items-center">
                     <TouchableOpacity
-                      className="flex-row items-center mr-5"
+                      className="mr-5 flex-row items-center"
                       onPress={() => openEdit(location)}>
-                      <Feather name="edit-2" size={16} color="#6366f1" />
-                      <Text className="text-sm font-sans-bold text-accent ml-2">Edit</Text>
+                      <Feather name="edit-2" size={16} color={colors.accent} />
+                      <Text className="ml-2 text-sm font-sans-bold" style={theme.textAccent}>
+                        Edit
+                      </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       className="flex-row items-center"
                       onPress={() => handleRemove(location)}>
-                      <Feather name="trash-2" size={16} color="#ef4444" />
-                      <Text className="text-sm font-sans-bold text-red-500 ml-2">Remove</Text>
+                      <Feather name="trash-2" size={16} color={colors.destructive} />
+                      <Text
+                        className="ml-2 text-sm font-sans-bold"
+                        style={{ color: colors.destructive }}>
+                        Remove
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -205,9 +243,12 @@ export default function WarehouseLocations() {
 
           <TouchableOpacity
             onPress={openAdd}
-            className="w-full flex-row items-center justify-center rounded-2xl bg-card border-2 border-dashed border-border py-6 mt-2 shadow-sm">
-            <Feather name="plus-circle" size={24} color="#6366f1" />
-            <Text className="text-base font-sans-bold text-accent ml-2">Add New Location</Text>
+            className="mt-2 w-full flex-row items-center justify-center rounded-2xl border-2 border-dashed py-6 shadow-sm"
+            style={{ ...theme.card, borderColor: colors.border }}>
+            <Feather name="plus-circle" size={24} color={colors.accent} />
+            <Text className="ml-2 text-base font-sans-bold" style={theme.textAccent}>
+              Add New Location
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       )}
@@ -215,58 +256,61 @@ export default function WarehouseLocations() {
       <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          className="flex-1 justify-end bg-black/50">
-          <View className="bg-background rounded-t-[32px] px-6 pt-4 pb-10">
+          className="flex-1 justify-end"
+          style={theme.modalOverlay}>
+          <View
+            className="rounded-t-[32px] px-6 pt-4 pb-10"
+            style={[theme.varStyle, { backgroundColor: colors.background }]}>
             <View className="items-center pb-2">
-              <View className="w-12 h-1.5 bg-border rounded-full" />
+              <View className="h-1.5 w-12 rounded-full" style={{ backgroundColor: colors.border }} />
             </View>
-            <Text className="text-xl font-sans-bold text-primary mb-6">
+            <Text className="mb-6 text-xl font-sans-bold" style={theme.textPrimary}>
               {editing ? 'Edit Location' : 'Add Location'}
             </Text>
 
-            <View className="gap-2 mb-4">
-              <Text className="text-sm font-sans-semibold text-primary ml-1">Warehouse Name</Text>
-              <TextInput
-                className="rounded-xl border border-border bg-card px-4 py-4 text-base font-sans-medium text-primary"
+            <View className="mb-6 gap-4">
+              <TextField
+                label="Warehouse Name"
+                leftIcon="home"
                 value={name}
-                onChangeText={setName}
+                error={errors.name}
                 placeholder="e.g. Tema Main Yard"
-                placeholderTextColor="#94a3b8"
+                onChangeText={(v) => {
+                  setName(v);
+                  setErrors((e) => ({ ...e, name: undefined }));
+                }}
               />
-            </View>
-
-            <View className="gap-2 mb-6">
-              <Text className="text-sm font-sans-semibold text-primary ml-1">Address</Text>
-              <TextInput
-                className="rounded-xl border border-border bg-card px-4 py-4 text-base font-sans-medium text-primary"
+              <TextField
+                label="Address"
+                leftIcon="map-pin"
                 value={address}
-                onChangeText={setAddress}
+                error={errors.address}
                 multiline
                 placeholder="Heavy Industrial Area, Plot 42, Tema"
-                placeholderTextColor="#94a3b8"
+                onChangeText={(v) => {
+                  setAddress(v);
+                  setErrors((e) => ({ ...e, address: undefined }));
+                }}
               />
             </View>
 
             <View className="flex-row gap-3">
-              <TouchableOpacity
+              <Button
+                label="Cancel"
+                variant="secondary"
+                className="flex-1"
                 onPress={() => setModalVisible(false)}
-                className="flex-1 items-center justify-center rounded-xl bg-muted py-4 border border-border">
-                <Text className="text-base font-sans-bold text-primary">Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+              />
+              <Button
+                label="Save"
+                className="flex-1"
+                loading={isSaving}
                 onPress={handleSave}
-                disabled={isSaving}
-                className="flex-1 items-center justify-center rounded-xl bg-accent py-4">
-                {isSaving ? (
-                  <ActivityIndicator size="small" color="#ffffff" />
-                ) : (
-                  <Text className="text-base font-sans-bold text-white">Save</Text>
-                )}
-              </TouchableOpacity>
+              />
             </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </SafeAreaView>
+    </ThemedSafeAreaView>
   );
 }

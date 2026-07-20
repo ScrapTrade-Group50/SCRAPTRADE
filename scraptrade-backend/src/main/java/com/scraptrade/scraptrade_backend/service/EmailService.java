@@ -32,10 +32,10 @@ public class EmailService {
         return enabled && mailSender.isPresent();
     }
 
-    public void sendPasswordResetEmail(String toEmail, String resetLink) {
+    public boolean sendPasswordResetEmail(String toEmail, String resetLink) {
         if (!isEnabled()) {
             log.warn("Mail is disabled or not configured — password reset email not sent to {}", toEmail);
-            return;
+            return false;
         }
 
         SimpleMailMessage message = new SimpleMailMessage();
@@ -47,8 +47,10 @@ public class EmailService {
         try {
             mailSender.get().send(message);
             log.info("Password reset email sent to {}", toEmail);
+            return true;
         } catch (Exception ex) {
             log.error("Failed to send password reset email to {}", toEmail, ex);
+            return false;
         }
     }
 

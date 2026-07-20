@@ -1,28 +1,42 @@
-import React, { useRef, useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  ActivityIndicator,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { apiClient } from '../../api/client';
+import { Link, useRouter, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiClient, readTokenFromWebUrl, warmBackend } from '../../api/client';
+import ThemedSafeAreaView from '@/components/ThemedSafeAreaView';
+import ScreenHeader from '@/components/ScreenHeader';
+import { Button, TextField, FormErrorBanner } from '@/components/ui';
+import { useScreenTheme } from '@/hooks/useScreenTheme';
+import { parseResetPasswordError } from '@/utils/apiErrors';
+import {
+  validatePassword,
+  validatePasswordMatch,
+  required,
+  type FieldErrors,
+} from '@/utils/validation';
 
 type ResetView = 'form' | 'success';
+type ResetFields = 'token' | 'password' | 'confirmPassword';
+
+function resolveInitialToken(tokenParam: string | string[] | undefined): string {
+  const fromRoute = Array.isArray(tokenParam) ? tokenParam[0] : (tokenParam ?? '');
+  if (fromRoute?.trim()) {
+    return fromRoute.trim();
+  }
+  return readTokenFromWebUrl();
+}
 
 export default function ResetPassword() {
   const router = useRouter();
+  const theme = useScreenTheme();
+  const { colors } = theme;
   const { token: tokenParam } = useLocalSearchParams();
   const submittedRef = useRef(false);
+  const clearedSessionRef = useRef(false);
 
-  const initialToken = Array.isArray(tokenParam) ? tokenParam[0] : (tokenParam ?? '');
-  const hasLinkToken = Boolean(initialToken?.trim());
+  const initialToken = resolveInitialToken(tokenParam);
+  const hasLinkToken = Boolean(initialToken);
 
   const [view, setView] = useState<ResetView>('form');
   const [token, setToken] = useState(initialToken);
@@ -30,29 +44,59 @@ export default function ResetPassword() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showManualToken, setShowManualToken] = useState(!hasLinkToken);
+  const [errors, setErrors] = useState<FieldErrors<ResetFields>>({});
   const [formError, setFormError] = useState('');
+  const [tokenExpired, setTokenExpired] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+
+  useEffect(() => {
+    warmBackend().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const fromWeb = readTokenFromWebUrl();
+    if (fromWeb && fromWeb !== token) {
+      setToken(fromWeb);
+      setShowManualToken(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (clearedSessionRef.current) return;
+    clearedSessionRef.current = true;
+    AsyncStorage.removeItem('userToken');
+  }, []);
+
+  const clearField = (field: ResetFields) => {
+    setErrors((prev) => ({ ...prev, [field]: undefined }));
+    setFormError('');
+    setTokenExpired(false);
+  };
+
+  const validate = () => {
+    const next: FieldErrors<ResetFields> = {
+      token: required(token, 'Reset token') ?? undefined,
+      password: validatePassword(password, { min: 6 }) ?? undefined,
+      confirmPassword:
+        validatePassword(confirmPassword, { min: 6 }) ??
+        validatePasswordMatch(password, confirmPassword) ??
+        undefined,
+    };
+    if (!next.confirmPassword) {
+      next.confirmPassword = validatePasswordMatch(password, confirmPassword) ?? undefined;
+    }
+    setErrors(next);
+    return !next.token && !next.password && !next.confirmPassword;
+  };
 
   const handleReset = async () => {
     if (submittedRef.current || isLoading || view === 'success') return;
-
-    setFormError('');
-
-    if (!token.trim() || !password || !confirmPassword) {
-      setFormError('Please fill in all fields.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setFormError('Passwords do not match.');
-      return;
-    }
-    if (password.length < 6) {
-      setFormError('Password must be at least 6 characters.');
-      return;
-    }
+    if (!validate()) return;
 
     submittedRef.current = true;
     setIsLoading(true);
+    setFormError('');
+    setTokenExpired(false);
 
     try {
       const response = await apiClient.post('/auth/reset-password', {
@@ -63,9 +107,11 @@ export default function ResetPassword() {
         response.data.message || 'Password updated successfully. You can now sign in.'
       );
       setView('success');
-    } catch (error: any) {
+    } catch (error: unknown) {
       submittedRef.current = false;
-      setFormError(error.response?.data?.message || 'Could not reset password. Please try again.');
+      const parsed = parseResetPasswordError(error);
+      setFormError(parsed.formError);
+      setTokenExpired(Boolean(parsed.tokenExpired));
     } finally {
       setIsLoading(false);
     }
@@ -73,116 +119,121 @@ export default function ResetPassword() {
 
   if (view === 'success') {
     return (
-      <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
+      <ThemedSafeAreaView edges={['top', 'bottom']}>
         <View className="flex-1 items-center justify-center px-6">
-          <View className="h-20 w-20 rounded-full bg-emerald-500 items-center justify-center mb-6">
-            <Feather name="check" size={40} color="#ffffff" />
+          <View
+            className="mb-6 h-20 w-20 items-center justify-center rounded-full"
+            style={{ backgroundColor: colors.success }}>
+            <Feather name="check" size={40} color={colors.onAccent} />
           </View>
-          <Text className="text-2xl font-sans-extrabold text-primary text-center mb-3">
+          <Text className="mb-3 text-center text-2xl font-sans-extrabold" style={theme.textPrimary}>
             Password Updated
           </Text>
-          <Text className="text-base font-sans-medium text-muted-foreground text-center leading-6 mb-8">
+          <Text className="mb-8 text-center text-base font-sans-medium leading-6" style={theme.textMuted}>
             {successMessage}
           </Text>
-          <View className="w-full rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 flex-row gap-3">
-            <Feather name="shield" size={20} color="#059669" />
-            <Text className="flex-1 text-sm font-sans-medium text-emerald-900 leading-5">
+          <View
+            className="w-full flex-row gap-3 rounded-2xl border px-4 py-4"
+            style={{ ...theme.successSoft, borderColor: `${colors.success}40` }}>
+            <Feather name="shield" size={20} color={colors.success} />
+            <Text className="flex-1 text-sm font-sans-medium leading-5" style={theme.textPrimary}>
               Your reset link has been used. Sign in with your new password.
             </Text>
           </View>
         </View>
         <View className="px-6 pb-8">
-          <TouchableOpacity
-            onPress={() => router.replace('/(auth)/sign-in')}
-            className="w-full items-center rounded-xl py-4 bg-accent">
-            <Text className="text-base font-sans-bold text-white">Sign In</Text>
-          </TouchableOpacity>
+          <Button label="Sign In" onPress={() => router.replace('/(auth)/sign-in')} />
         </View>
-      </SafeAreaView>
+      </ThemedSafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background" style={{ flex: 1 }} edges={['top']}>
-      <View className="px-6 py-4 flex-row items-center">
-        <TouchableOpacity onPress={() => router.back()} className="mr-4 p-1">
-          <Feather name="arrow-left" size={24} color="#0f172a" />
-        </TouchableOpacity>
-      </View>
+    <ThemedSafeAreaView edges={['top']}>
+      <ScreenHeader title="New Password" />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}>
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerClassName="px-6 pt-6 pb-12"
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 24, paddingBottom: 48 }}
           keyboardShouldPersistTaps="handled">
-          <Text className="text-3xl font-sans-extrabold text-primary mb-2">New Password</Text>
-          <Text className="text-base font-sans-medium text-muted-foreground mb-6">
-            {hasLinkToken
-              ? 'Choose a new password for your account. This link expires in 1 hour.'
+          <Text className="mb-4 text-base font-sans-medium" style={theme.textMuted}>
+            {hasLinkToken || token
+              ? 'Choose a new password for your account. Reset links expire after 1 hour.'
               : 'Enter the reset token from your email and choose a new password.'}
           </Text>
 
-          {formError ? (
-            <View className="mb-6 flex-row items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-              <Feather name="alert-circle" size={20} color="#dc2626" />
-              <Text className="flex-1 text-sm font-sans-medium text-red-800 leading-5">{formError}</Text>
+          <FormErrorBanner message={formError} />
+
+          {tokenExpired ? (
+            <View
+              className="mb-4 rounded-xl border px-4 py-3"
+              style={{ ...theme.accentSoft, borderColor: `${colors.accent}40` }}>
+              <Text className="text-sm font-sans-medium leading-5" style={theme.textPrimary}>
+                This link is invalid or has expired.{' '}
+                <Link href="/(auth)/forgot-password" asChild>
+                  <Text className="font-sans-bold" style={theme.textAccent}>
+                    Request a new reset link
+                  </Text>
+                </Link>
+              </Text>
             </View>
           ) : null}
 
-          <View className="gap-5 mb-8">
+          <View
+            className="mb-8 gap-5 rounded-3xl border p-5"
+            style={{ ...theme.card, borderColor: colors.border }}>
             {showManualToken ? (
-              <View className="gap-2">
-                <Text className="text-sm font-sans-semibold text-primary">Reset Token</Text>
-                <TextInput
-                  className="rounded-xl border border-border bg-card px-4 py-4 text-base font-sans-medium text-primary"
-                  value={token}
-                  onChangeText={setToken}
-                  autoCapitalize="none"
-                  editable={!isLoading}
-                />
-              </View>
+              <TextField
+                label="Reset Token"
+                leftIcon="key"
+                value={token}
+                error={errors.token}
+                editable={!isLoading}
+                autoCapitalize="none"
+                onChangeText={(v) => {
+                  setToken(v);
+                  clearField('token');
+                }}
+              />
             ) : null}
-            {!showManualToken && hasLinkToken ? (
+            {!showManualToken && (hasLinkToken || token) ? (
               <TouchableOpacity onPress={() => setShowManualToken(true)} disabled={isLoading}>
-                <Text className="text-sm font-sans-semibold text-accent">Enter token manually</Text>
+                <Text className="text-sm font-sans-semibold" style={theme.textAccent}>
+                  Enter token manually
+                </Text>
               </TouchableOpacity>
             ) : null}
-            <View className="gap-2">
-              <Text className="text-sm font-sans-semibold text-primary">New Password</Text>
-              <TextInput
-                className="rounded-xl border border-border bg-card px-4 py-4 text-base font-sans-medium text-primary"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                editable={!isLoading}
-              />
-            </View>
-            <View className="gap-2">
-              <Text className="text-sm font-sans-semibold text-primary">Confirm Password</Text>
-              <TextInput
-                className="rounded-xl border border-border bg-card px-4 py-4 text-base font-sans-medium text-primary"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry
-                editable={!isLoading}
-              />
-            </View>
+            <TextField
+              label="New Password"
+              isPassword
+              value={password}
+              error={errors.password}
+              editable={!isLoading}
+              hint="At least 6 characters"
+              onChangeText={(v) => {
+                setPassword(v);
+                clearField('password');
+              }}
+            />
+            <TextField
+              label="Confirm Password"
+              isPassword
+              value={confirmPassword}
+              error={errors.confirmPassword}
+              editable={!isLoading}
+              onChangeText={(v) => {
+                setConfirmPassword(v);
+                clearField('confirmPassword');
+              }}
+            />
           </View>
 
-          <TouchableOpacity
-            onPress={handleReset}
-            disabled={isLoading}
-            className={`w-full items-center rounded-xl py-4 ${isLoading ? 'bg-accent/70' : 'bg-accent'}`}>
-            {isLoading ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text className="text-base font-sans-bold text-white">Update Password</Text>
-            )}
-          </TouchableOpacity>
+          <Button label="Update Password" loading={isLoading} onPress={handleReset} />
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </ThemedSafeAreaView>
   );
 }

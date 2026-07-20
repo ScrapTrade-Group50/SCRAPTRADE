@@ -1,5 +1,6 @@
 package com.scraptrade.scraptrade_backend.controller;
 
+import com.scraptrade.scraptrade_backend.dto.ListingCardDto;
 import com.scraptrade.scraptrade_backend.model.Listing;
 import com.scraptrade.scraptrade_backend.model.User;
 import com.scraptrade.scraptrade_backend.repository.ListingRepository;
@@ -46,22 +47,29 @@ public class ListingController {
     }
 
     @GetMapping
-    public List<Listing> getAvailableListings() {
-        return listingRepository.findByStatus(Listing.Status.AVAILABLE);
+    public List<ListingCardDto> getAvailableListings() {
+        return listingRepository.findByStatusWithSeller(Listing.Status.AVAILABLE).stream()
+                .map(ListingCardDto::from)
+                .toList();
     }
 
     @GetMapping("/mine")
-    public List<Listing> getMyListings(Authentication authentication) {
+    public List<ListingCardDto> getMyListings(Authentication authentication) {
         User seller = requireUser(authentication);
         if (seller.getRole() != User.Role.FACTORY_SELLER) {
             throw new SecurityException("Only factory sellers can view their inventory.");
         }
-        return listingRepository.findBySeller(seller);
+        return listingRepository.findBySellerWithSeller(seller).stream()
+                .map(ListingCardDto::from)
+                .toList();
     }
 
     @GetMapping("/search")
-    public List<Listing> searchListings(@RequestParam String keyword) {
-        return listingRepository.findByTitleContainingIgnoreCaseAndStatus(keyword, Listing.Status.AVAILABLE);
+    public List<ListingCardDto> searchListings(@RequestParam String keyword) {
+        return listingRepository.findByTitleContainingIgnoreCaseAndStatus(keyword, Listing.Status.AVAILABLE).stream()
+                .map(listing -> listingRepository.findByIdWithSeller(listing.getId()).orElse(listing))
+                .map(ListingCardDto::from)
+                .toList();
     }
 
     @PostMapping
@@ -170,8 +178,9 @@ public class ListingController {
     }
 
     @GetMapping("/{id}")
-    public Listing getListingById(@PathVariable Long id) {
-        return listingRepository.findById(id)
+    public ListingCardDto getListingById(@PathVariable Long id) {
+        Listing listing = listingRepository.findByIdWithSeller(id)
                 .orElseThrow(() -> new IllegalArgumentException("Listing not found!"));
+        return ListingCardDto.from(listing);
     }
 }

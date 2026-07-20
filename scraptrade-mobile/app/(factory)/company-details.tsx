@@ -1,28 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { apiClient } from '../../api/client';
 import { useAuthStore } from '@/store/authStore';
+import ScreenHeader from '@/components/ScreenHeader';
+import ThemedSafeAreaView from '@/components/ThemedSafeAreaView';
+import { useScreenTheme } from '@/hooks/useScreenTheme';
+import { TextField, FormErrorBanner } from '@/components/ui';
+import {
+  validatePhone,
+  validateRequiredText,
+  type FieldErrors,
+} from '@/utils/validation';
+import { showErrorNotice, showSuccessNotice } from '@/utils/alert';
+
+type CompanyFields = 'companyName' | 'phoneNumber';
 
 export default function CompanyDetails() {
   const router = useRouter();
   const updateProfile = useAuthStore((s) => s.updateProfile);
+  const theme = useScreenTheme();
+  const { colors } = theme;
 
   const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors<CompanyFields>>({});
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -32,7 +38,7 @@ export default function CompanyDetails() {
         setEmail(response.data.email ?? '');
         setPhoneNumber(response.data.phoneNumber ?? '');
       } catch {
-        Alert.alert('Error', 'Could not load company details.');
+        showErrorNotice('Error', 'Could not load company details.');
         router.back();
       } finally {
         setIsLoading(false);
@@ -41,18 +47,26 @@ export default function CompanyDetails() {
     load();
   }, [router]);
 
+  const validate = () => {
+    const next: FieldErrors<CompanyFields> = {
+      companyName: validateRequiredText(companyName, 'Company name', { min: 2 }) ?? undefined,
+      phoneNumber: validatePhone(phoneNumber, { required: false }) ?? undefined,
+    };
+    setErrors(next);
+    return !next.companyName && !next.phoneNumber;
+  };
+
   const handleSave = async () => {
-    if (!companyName.trim()) {
-      Alert.alert('Required', 'Please enter your company name.');
-      return;
-    }
+    if (!validate()) return;
     setIsSaving(true);
+    setFormError(null);
     try {
-      await updateProfile(companyName.trim(), phoneNumber.trim());
-      Alert.alert('Saved', 'Company details updated.');
-      router.back();
+      await updateProfile(companyName.trim(), phoneNumber.trim().replace(/\s+/g, ''));
+      showSuccessNotice('Saved', 'Company details updated.', () => router.back());
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Could not save details.');
+      const message = error.response?.data?.message || 'Could not save details.';
+      setFormError(message);
+      showErrorNotice('Error', message);
     } finally {
       setIsSaving(false);
     }
@@ -68,68 +82,79 @@ export default function CompanyDetails() {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 bg-background items-center justify-center">
-        <ActivityIndicator size="large" color="#6366f1" />
-      </SafeAreaView>
+      <ThemedSafeAreaView className="items-center justify-center">
+        <ActivityIndicator size="large" color={colors.accent} />
+      </ThemedSafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background" style={{ flex: 1 }} edges={['top']}>
-      <View className="flex-row justify-between items-center px-6 py-4 bg-background border-b border-border">
-        <View className="flex-row items-center">
-          <TouchableOpacity onPress={() => router.back()} className="mr-4 p-1">
-            <Feather name="arrow-left" size={24} color="#0b1f1a" />
+    <ThemedSafeAreaView edges={['top']}>
+      <ScreenHeader
+        title="Company Details"
+        right={
+          <TouchableOpacity onPress={handleSave} disabled={isSaving}>
+            {isSaving ? (
+              <ActivityIndicator size="small" color={colors.accent} />
+            ) : (
+              <Text className="text-base font-sans-bold" style={theme.textAccent}>
+                Save
+              </Text>
+            )}
           </TouchableOpacity>
-          <Text className="text-xl font-sans-bold text-primary">Company Details</Text>
-        </View>
-        <TouchableOpacity onPress={handleSave} disabled={isSaving}>
-          {isSaving ? (
-            <ActivityIndicator size="small" color="#6366f1" />
-          ) : (
-            <Text className="text-base font-sans-bold text-accent">Save</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+        }
+      />
 
       <ScrollView
         style={{ flex: 1 }}
         contentContainerClassName="px-6 pt-6 pb-12"
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
-        <View className="items-center mb-8 pt-4">
-          <View className="h-24 w-24 bg-accent/10 rounded-2xl items-center justify-center border-4 border-card shadow-sm">
-            <Text className="text-3xl font-sans-bold text-accent">{initials || '?'}</Text>
+        <View className="mb-8 items-center pt-4">
+          <View
+            className="h-24 w-24 items-center justify-center rounded-2xl border-4"
+            style={{ borderColor: colors.card, backgroundColor: `${colors.accent}1A` }}>
+            <Text className="text-3xl font-sans-bold" style={theme.textAccent}>
+              {initials || '?'}
+            </Text>
           </View>
         </View>
 
-        <View className="gap-5 mb-10">
-          <View className="gap-2">
-            <Text className="text-sm font-sans-semibold text-primary ml-1">Registered Company Name</Text>
-            <TextInput
-              className="rounded-xl border border-border bg-card px-4 py-4 text-base font-sans-medium text-primary"
-              value={companyName}
-              onChangeText={setCompanyName}
-            />
-          </View>
-          <View className="gap-2">
-            <Text className="text-sm font-sans-semibold text-primary ml-1">Business Email</Text>
-            <TextInput
-              className="rounded-xl border border-border bg-muted px-4 py-4 text-base font-sans-medium text-muted-foreground"
-              value={email}
-              editable={false}
-            />
-          </View>
-          <View className="gap-2">
-            <Text className="text-sm font-sans-semibold text-primary ml-1">Contact Phone</Text>
-            <TextInput
-              className="rounded-xl border border-border bg-card px-4 py-4 text-base font-sans-medium text-primary"
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              keyboardType="phone-pad"
-            />
-          </View>
+        <FormErrorBanner message={formError} />
+
+        <View className="mb-10 gap-5">
+          <TextField
+            label="Registered Company Name"
+            leftIcon="briefcase"
+            value={companyName}
+            error={errors.companyName}
+            onChangeText={(v) => {
+              setCompanyName(v);
+              setErrors((e) => ({ ...e, companyName: undefined }));
+            }}
+          />
+          <TextField
+            label="Business Email"
+            leftIcon="mail"
+            value={email}
+            editable={false}
+            hint="Email cannot be changed here"
+          />
+          <TextField
+            label="Contact Phone"
+            leftIcon="phone"
+            value={phoneNumber}
+            error={errors.phoneNumber}
+            keyboardType="phone-pad"
+            placeholder="0241234567"
+            textContentType="telephoneNumber"
+            onChangeText={(v) => {
+              setPhoneNumber(v);
+              setErrors((e) => ({ ...e, phoneNumber: undefined }));
+            }}
+          />
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </ThemedSafeAreaView>
   );
 }
