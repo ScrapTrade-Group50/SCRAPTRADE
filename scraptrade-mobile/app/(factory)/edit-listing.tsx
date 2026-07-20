@@ -2,21 +2,31 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   Image,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { apiClient } from '../../api/client';
 import { uploadListingImage, type PickedImage } from '@/utils/uploadImage';
+import ScreenHeader from '@/components/ScreenHeader';
+import ThemedSafeAreaView from '@/components/ThemedSafeAreaView';
+import { useScreenTheme } from '@/hooks/useScreenTheme';
+import { Button, TextField } from '@/components/ui';
+import {
+  validatePositiveNumber,
+  validateRequiredText,
+  type FieldErrors,
+  hasErrors,
+} from '@/utils/validation';
+import { showConfirm, showErrorNotice, showSuccessNotice } from '@/utils/alert';
+
+type ListingFields = 'title' | 'weight' | 'price' | 'pickupLocation';
 
 type Listing = {
   id: number;
@@ -33,6 +43,8 @@ type Listing = {
 
 export default function EditListing() {
   const router = useRouter();
+  const theme = useScreenTheme();
+  const { colors } = theme;
   const { id } = useLocalSearchParams();
 
   const [category, setCategory] = useState('METAL');
@@ -46,6 +58,7 @@ export default function EditListing() {
   const [image, setImage] = useState<PickedImage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors<ListingFields>>({});
 
   useEffect(() => {
     const fetchListing = async () => {
@@ -53,7 +66,7 @@ export default function EditListing() {
         const response = await apiClient.get(`/listings/${id}`);
         const data: Listing = response.data;
         if (data.status !== 'AVAILABLE') {
-          Alert.alert('Cannot Edit', 'This listing can no longer be edited.');
+          showErrorNotice('Cannot Edit', 'This listing can no longer be edited.');
           router.back();
           return;
         }
@@ -66,7 +79,7 @@ export default function EditListing() {
         setPrice(String(data.pricePerUnit));
         setImageUrl(data.imageUrl);
       } catch {
-        Alert.alert('Error', 'Could not load listing.');
+        showErrorNotice('Error', 'Could not load listing.');
         router.back();
       } finally {
         setIsLoading(false);
@@ -78,7 +91,7 @@ export default function EditListing() {
   const pickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      Alert.alert('Permission Required', 'Allow photo access to update listing images.');
+      showErrorNotice('Permission Required', 'Allow photo access to update listing images.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -97,21 +110,29 @@ export default function EditListing() {
     }
   };
 
+  const validate = () => {
+    const next: FieldErrors<ListingFields> = {
+      title: validateRequiredText(title, 'Listing title', { min: 2 }) ?? undefined,
+      weight: validatePositiveNumber(weight, 'Weight') ?? undefined,
+      price: validatePositiveNumber(price, 'Price per kg') ?? undefined,
+      pickupLocation: validateRequiredText(pickupLocation, 'Pickup location', { min: 2 }) ?? undefined,
+    };
+    setErrors(next);
+    return !hasErrors(next);
+  };
+
   const handleUpdate = async () => {
-    if (!title || !weight || !price || !pickupLocation) {
-      Alert.alert('Missing Info', 'Please fill in title, weight, price per kg, and pickup location.');
-      return;
-    }
+    if (!validate()) return;
 
     setIsSaving(true);
     try {
       await apiClient.put(`/listings/${id}`, {
-        title,
-        description,
+        title: title.trim(),
+        description: description.trim(),
         category,
         weight: parseFloat(weight),
-        dimensions,
-        pickupLocation,
+        dimensions: dimensions.trim(),
+        pickupLocation: pickupLocation.trim(),
         pricePerUnit: parseFloat(price),
       });
 
@@ -119,16 +140,16 @@ export default function EditListing() {
         await uploadListingImage(id as string, image);
       }
 
-      Alert.alert('Success', 'Listing updated.', [{ text: 'OK', onPress: () => router.back() }]);
+      showSuccessNotice('Success', 'Listing updated.', () => router.back());
     } catch (error: any) {
-      Alert.alert('Update Failed', error.response?.data?.message || 'Could not save changes.');
+      showErrorNotice('Update Failed', error.response?.data?.message || 'Could not save changes.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = () => {
-    Alert.alert('Delete Listing', 'Permanently delete this listing?', [
+    showConfirm('Delete Listing', 'Permanently delete this listing?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -138,7 +159,7 @@ export default function EditListing() {
             await apiClient.delete(`/listings/${id}`);
             router.back();
           } catch (error: any) {
-            Alert.alert('Error', error.response?.data?.message || 'Could not delete listing.');
+            showErrorNotice('Error', error.response?.data?.message || 'Could not delete listing.');
           }
         },
       },
@@ -147,22 +168,17 @@ export default function EditListing() {
 
   if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 bg-background items-center justify-center">
-        <ActivityIndicator size="large" color="#6366f1" />
-      </SafeAreaView>
+      <ThemedSafeAreaView className="items-center justify-center">
+        <ActivityIndicator size="large" color={colors.accent} />
+      </ThemedSafeAreaView>
     );
   }
 
   const displayImage = image?.uri ?? imageUrl;
 
   return (
-    <SafeAreaView className="flex-1 bg-background" style={{ flex: 1 }} edges={['top']}>
-      <View className="flex-row items-center px-6 py-4 border-b border-border bg-background">
-        <TouchableOpacity onPress={() => router.back()} className="mr-4 p-1">
-          <Feather name="arrow-left" size={24} color="#0f172a" />
-        </TouchableOpacity>
-        <Text className="text-xl font-sans-bold text-primary">Edit Listing</Text>
-      </View>
+    <ThemedSafeAreaView edges={['top']}>
+      <ScreenHeader title="Edit Listing" />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -174,29 +190,38 @@ export default function EditListing() {
           showsVerticalScrollIndicator={false}>
           <TouchableOpacity
             onPress={pickImage}
-            className="bg-card border-border mb-8 h-48 w-full items-center justify-center overflow-hidden rounded-3xl border-2 border-dashed">
+            className="mb-8 h-48 w-full items-center justify-center overflow-hidden rounded-3xl border-2 border-dashed"
+            style={{ ...theme.card, borderColor: colors.border }}>
             {displayImage ? (
               <Image source={{ uri: displayImage }} className="h-full w-full" resizeMode="cover" />
             ) : (
               <>
-                <Feather name="camera" size={28} color="#6366f1" />
-                <Text className="font-sans-bold text-primary mt-2">Tap to change photo</Text>
+                <Feather name="camera" size={28} color={colors.accent} />
+                <Text className="mt-2 font-sans-bold" style={theme.textPrimary}>
+                  Tap to change photo
+                </Text>
               </>
             )}
           </TouchableOpacity>
 
           <View className="mb-8">
-            <Text className="text-sm font-sans-semibold text-primary mb-3">Material Category</Text>
+            <Text className="mb-3 text-sm font-sans-semibold" style={theme.textPrimary}>
+              Material Category
+            </Text>
             <View className="flex-row gap-3">
               {['METAL', 'WOOD', 'TEXTILE'].map((cat) => (
                 <TouchableOpacity
                   key={cat}
                   onPress={() => setCategory(cat)}
-                  className={`flex-1 items-center py-3 rounded-xl border-2 ${
-                    category === cat ? 'border-accent bg-accent/10' : 'border-border bg-card'
-                  }`}>
+                  className="flex-1 items-center rounded-xl border-2 py-3"
+                  style={
+                    category === cat
+                      ? { ...theme.accentSoft, borderColor: colors.accent }
+                      : theme.card
+                  }>
                   <Text
-                    className={`font-sans-bold text-xs ${category === cat ? 'text-accent' : 'text-muted-foreground'}`}>
+                    className="font-sans-bold text-xs"
+                    style={category === cat ? theme.textAccent : theme.textMuted}>
                     {cat}
                   </Text>
                 </TouchableOpacity>
@@ -204,80 +229,81 @@ export default function EditListing() {
             </View>
           </View>
 
-          <View className="gap-5 mb-10">
-            <View className="gap-2">
-              <Text className="text-sm font-sans-semibold text-primary">Listing Title *</Text>
-              <TextInput
-                value={title}
-                onChangeText={setTitle}
-                className="rounded-xl border border-border bg-card px-4 py-3 text-base font-sans-medium text-primary"
-              />
-            </View>
-            <View className="gap-2">
-              <Text className="text-sm font-sans-semibold text-primary">Description</Text>
-              <TextInput
-                value={description}
-                onChangeText={setDescription}
-                multiline
-                numberOfLines={3}
-                className="rounded-xl border border-border bg-card px-4 py-3 text-base font-sans-medium text-primary h-24"
-              />
-            </View>
-            <View className="gap-2">
-              <Text className="text-sm font-sans-semibold text-primary">Weight (kg) *</Text>
-              <TextInput
-                value={weight}
-                onChangeText={setWeight}
-                keyboardType="numeric"
-                className="rounded-xl border border-border bg-card px-4 py-3 text-base font-sans-medium text-primary"
-              />
-            </View>
-            <View className="gap-2">
-              <Text className="text-sm font-sans-semibold text-primary">Dimensions & Specs</Text>
-              <TextInput
-                value={dimensions}
-                onChangeText={setDimensions}
-                className="rounded-xl border border-border bg-card px-4 py-3 text-base font-sans-medium text-primary"
-              />
-            </View>
-            <View className="gap-2">
-              <Text className="text-sm font-sans-semibold text-primary">Pickup Location *</Text>
-              <TextInput
-                value={pickupLocation}
-                onChangeText={setPickupLocation}
-                className="rounded-xl border border-border bg-card px-4 py-3 text-base font-sans-medium text-primary"
-              />
-            </View>
-            <View className="gap-2">
-              <Text className="text-sm font-sans-semibold text-primary">Price per kg (GHS) *</Text>
-              <TextInput
-                value={price}
-                onChangeText={setPrice}
-                keyboardType="decimal-pad"
-                className="rounded-xl border border-border bg-card px-4 py-3 text-base font-sans-medium text-primary"
-              />
-            </View>
+          <View className="mb-10 gap-5">
+            <TextField
+              label="Listing Title *"
+              leftIcon="edit-3"
+              value={title}
+              error={errors.title}
+              onChangeText={(v) => {
+                setTitle(v);
+                setErrors((e) => ({ ...e, title: undefined }));
+              }}
+            />
+            <TextField
+              label="Description"
+              leftIcon="file-text"
+              value={description}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+              onChangeText={setDescription}
+            />
+            <TextField
+              label="Weight (kg) *"
+              leftIcon="package"
+              value={weight}
+              error={errors.weight}
+              keyboardType="decimal-pad"
+              onChangeText={(v) => {
+                setWeight(v);
+                setErrors((e) => ({ ...e, weight: undefined }));
+              }}
+            />
+            <TextField
+              label="Dimensions & Specs"
+              leftIcon="maximize"
+              value={dimensions}
+              onChangeText={setDimensions}
+            />
+            <TextField
+              label="Pickup Location *"
+              leftIcon="map-pin"
+              value={pickupLocation}
+              error={errors.pickupLocation}
+              onChangeText={(v) => {
+                setPickupLocation(v);
+                setErrors((e) => ({ ...e, pickupLocation: undefined }));
+              }}
+            />
+            <TextField
+              label="Price per kg (GHS) *"
+              leftIcon="dollar-sign"
+              value={price}
+              error={errors.price}
+              keyboardType="decimal-pad"
+              onChangeText={(v) => {
+                setPrice(v);
+                setErrors((e) => ({ ...e, price: undefined }));
+              }}
+            />
           </View>
 
-          <TouchableOpacity
+          <Button
+            label="Save Changes"
+            loading={isSaving}
+            className="mb-4"
             onPress={handleUpdate}
-            disabled={isSaving}
-            className={`w-full items-center rounded-xl py-4 shadow-sm mb-4 ${isSaving ? 'bg-primary/70' : 'bg-primary'}`}>
-            {isSaving ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text className="text-base font-sans-bold text-white">Save Changes</Text>
-            )}
-          </TouchableOpacity>
+          />
 
-          <TouchableOpacity
+          <Button
+            label="Delete Listing"
+            variant="danger"
+            className="mb-6 flex-row gap-2"
             onPress={handleDelete}
-            className="w-full items-center rounded-xl bg-red-50 py-4 border border-red-200 mb-6 flex-row justify-center gap-2">
-            <Feather name="trash-2" size={18} color="#ef4444" />
-            <Text className="text-base font-sans-bold text-red-500">Delete Listing</Text>
-          </TouchableOpacity>
+          />
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </ThemedSafeAreaView>
   );
 }

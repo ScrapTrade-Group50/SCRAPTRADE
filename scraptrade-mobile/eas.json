@@ -13,14 +13,20 @@
     },
     "preview": {
       "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://YOUR_STAGING_HOST/api"
+        "EXPO_PUBLIC_API_URL": "https://scraptrade-iupe.onrender.com/api"
       }
     },
     "production": {
       "autoIncrement": true,
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://YOUR_PRODUCTION_HOST/api"
+        "EXPO_PUBLIC_API_URL": "https://scraptrade-iupe.onrender.com/api"
       }
     }
   },

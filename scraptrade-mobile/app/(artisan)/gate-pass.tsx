@@ -1,42 +1,47 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  useWindowDimensions,
-  ActivityIndicator,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, ActivityIndicator, ScrollView } from 'react-native';
+import ThemedSafeAreaView from '@/components/ThemedSafeAreaView';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import QRCode from 'react-native-qrcode-svg';
 import { apiClient } from '../../api/client';
 import { ROUTES } from '@/utils/routes';
+import { useScreenTheme } from '@/hooks/useScreenTheme';
+import ScreenHeader from '@/components/ScreenHeader';
+import { Button } from '@/components/ui';
+import GatePassQrCode from '@/components/GatePassQrCode';
+import { firstSearchParam, formatPickupLine } from '@/utils/gatePassRoute';
 
 type OrderSummary = {
   status: string;
   gatePassCode: string;
+  listing?: {
+    title: string;
+    weight: number;
+    pickupLocation?: string;
+    seller?: {
+      companyName?: string;
+    };
+  };
 };
 
-type PickupPhase = 'loading' | 'awaiting' | 'completed';
+type PickupPhase = 'awaiting' | 'completed';
 
 const POLL_MS = 3000;
 
 export default function GatePass() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
-  const { code, title, weight, amount } = useLocalSearchParams();
+  const theme = useScreenTheme();
+  const { colors } = theme;
+  const { code, title, weight, amount, factory, pickup } = useLocalSearchParams();
 
-  const qrString = ((code as string) || 'QR-ERROR').trim().toUpperCase();
-  const displayTitle = (title as string) || 'Scrap Material';
-  const displayWeight = (weight as string) || '--';
-  const displayAmount = Number(amount as string);
+  const qrString = (firstSearchParam(code) || 'QR-ERROR').toUpperCase();
+  const displayTitle = firstSearchParam(title) || 'Scrap Material';
+  const displayWeight = firstSearchParam(weight) || '--';
+  const displayAmount = Number(firstSearchParam(amount));
   const amountLabel = Number.isFinite(displayAmount) ? displayAmount.toFixed(2) : '--';
 
-  const [phase, setPhase] = useState<PickupPhase>('loading');
-
-  const qrSize = Math.min(200, Math.max(160, width - 120));
+  const [phase, setPhase] = useState<PickupPhase>('awaiting');
+  const [orderListing, setOrderListing] = useState<OrderSummary['listing'] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,16 +56,16 @@ export default function GatePass() {
           (item) => item.gatePassCode?.trim().toUpperCase() === qrString
         );
 
+        if (order?.listing) {
+          setOrderListing(order.listing);
+        }
+
         if (order?.status === 'COMPLETED') {
           setPhase('completed');
           if (intervalId) clearInterval(intervalId);
-        } else {
-          setPhase('awaiting');
         }
       } catch {
-        if (!cancelled) {
-          setPhase((current) => (current === 'completed' ? 'completed' : 'awaiting'));
-        }
+        // Keep showing the gate pass even if status sync fails.
       }
     };
 
@@ -73,297 +78,147 @@ export default function GatePass() {
     };
   }, [qrString]);
 
-  const summaryCard = (
-    <View style={styles.summaryRow}>
-      <View style={styles.summaryLeft}>
-        <Text style={styles.itemTitle} numberOfLines={1}>
-          {displayTitle}
-        </Text>
-        <Text style={styles.itemMeta}>{displayWeight} kg</Text>
-      </View>
-      <Text style={styles.itemPrice}>GHS {amountLabel}</Text>
-    </View>
+  const pickupLine = formatPickupLine(
+    firstSearchParam(factory) || orderListing?.seller?.companyName,
+    firstSearchParam(pickup) || orderListing?.pickupLocation
   );
 
-  if (phase === 'loading') {
-    return (
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <View style={styles.loadingBody}>
-          <ActivityIndicator size="large" color="#6366f1" />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (phase === 'completed') {
-    return (
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <View style={styles.screen}>
-          <View style={styles.status}>
-            <View style={styles.checkCircle}>
-              <Feather name="check" size={28} color="#ffffff" />
-            </View>
-            <Text style={styles.statusTitle}>Pickup Confirmed</Text>
-            <Text style={styles.statusSubtitle}>
-              The factory scanned your gate pass. Your order is complete.
-            </Text>
-          </View>
-
-          <View style={styles.card}>
-            <View style={styles.confirmedBadge}>
-              <Feather name="shield" size={18} color="#15803d" />
-              <Text style={styles.confirmedBadgeText}>Escrow released after pickup</Text>
-            </View>
-            <View style={styles.divider} />
-            {summaryCard}
-          </View>
-
-          <View style={styles.footer}>
-            <TouchableOpacity
-              onPress={() => router.replace(ROUTES.artisanFeed)}
-              style={styles.cta}
-              activeOpacity={0.85}>
-              <Text style={styles.ctaText}>Back to Discover</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const handleLeave = () => router.replace(ROUTES.artisanFeed);
+  const isCompleted = phase === 'completed';
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <View style={styles.screen}>
-        <View style={styles.status}>
-          <View style={styles.awaitingCircle}>
-            <Feather name="smartphone" size={22} color="#6366f1" />
-          </View>
-          <Text style={styles.statusTitle}>Awaiting Pickup</Text>
-          <Text style={styles.statusSubtitle}>Show this QR code at the factory gate</Text>
-        </View>
+    <ThemedSafeAreaView edges={['top', 'bottom']}>
+      <ScreenHeader
+        title="Gate Pass"
+        subtitle={isCompleted ? 'Pickup complete' : 'Present at factory gate'}
+        onBack={handleLeave}
+      />
 
-        <View style={styles.card}>
-          <View style={styles.qrWrap}>
-            <QRCode value={qrString} size={qrSize} color="#0b1f1a" backgroundColor="#ffffff" />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 32 }}
+        showsVerticalScrollIndicator={false}>
+        <View className="mb-5 items-center">
+          <View
+            className="mb-3 h-14 w-14 items-center justify-center rounded-full"
+            style={isCompleted ? { backgroundColor: colors.success } : theme.accentSoft}>
+            <Feather
+              name={isCompleted ? 'check' : 'smartphone'}
+              size={isCompleted ? 28 : 22}
+              color={isCompleted ? '#FFFFFF' : colors.accent}
+            />
           </View>
-
-          <Text style={styles.codeLabel}>PICKUP CODE</Text>
-          <Text style={styles.code} selectable>
-            {qrString}
+          <Text className="text-center text-2xl font-sans-extrabold" style={theme.textPrimary}>
+            {isCompleted ? 'Pickup Confirmed' : 'Awaiting Pickup'}
           </Text>
-
-          <View style={styles.divider} />
-          {summaryCard}
+          <Text
+            className="mt-1 text-center text-sm font-sans-medium"
+            style={[theme.textMuted, { maxWidth: 280 }]}>
+            {isCompleted
+              ? 'The factory scanned your gate pass. Your order is complete.'
+              : 'Show this code at the factory gate to collect your materials.'}
+          </Text>
         </View>
 
-        <View style={styles.footer}>
-          <View style={styles.waitRow}>
-            <ActivityIndicator size="small" color="#6366f1" />
-            <Text style={styles.waitText}>Waiting for factory to scan…</Text>
-          </View>
-          <View style={styles.lockRow}>
-            <Feather name="lock" size={12} color="#6b7280" />
-            <Text style={styles.lockText}>Do not share — this code claims your materials</Text>
-          </View>
+        <View className="rounded-3xl border p-5" style={theme.card}>
+          {!isCompleted ? (
+            <>
+              <GatePassQrCode value={qrString} />
 
-          <TouchableOpacity
-            onPress={() => router.replace(ROUTES.artisanFeed)}
-            style={styles.secondaryCta}
-            activeOpacity={0.85}>
-            <Text style={styles.secondaryCtaText}>Leave — keep in Orders</Text>
-          </TouchableOpacity>
+              <View className="mt-5 items-center">
+                <Text
+                  className="text-[11px] font-sans-bold uppercase tracking-widest"
+                  style={theme.textMuted}>
+                  Pickup code
+                </Text>
+                <Text
+                  className="mt-1 text-center text-xl font-sans-extrabold tracking-wide"
+                  style={theme.textPrimary}
+                  selectable>
+                  {qrString}
+                </Text>
+              </View>
+
+              <View className="my-5 h-px w-full" style={{ backgroundColor: colors.border }} />
+            </>
+          ) : (
+            <View
+              className="mb-5 flex-row items-center gap-2 rounded-xl px-3.5 py-2.5"
+              style={theme.successSoft}>
+              <Feather name="shield" size={18} color={colors.success} />
+              <Text className="flex-1 text-sm font-sans-semibold" style={theme.textSuccess}>
+                Escrow released after pickup
+              </Text>
+            </View>
+          )}
+
+          {pickupLine ? (
+            <View
+              className="mb-4 flex-row items-start rounded-xl border p-3"
+              style={{ ...theme.cardMuted, borderColor: colors.border }}>
+              <Feather
+                name="map-pin"
+                size={16}
+                color={colors.mutedForeground}
+                style={{ marginTop: 2 }}
+              />
+              <View className="ml-2 flex-1">
+                <Text
+                  className="text-xs font-sans-bold uppercase tracking-wider"
+                  style={theme.textMuted}>
+                  Collect from
+                </Text>
+                <Text className="mt-0.5 text-sm font-sans-medium" style={theme.textPrimary}>
+                  {pickupLine}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
+          <View
+            className="flex-row items-center justify-between rounded-xl border px-4 py-3"
+            style={{ backgroundColor: colors.background, borderColor: colors.border }}>
+            <View style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
+              <Text className="text-base font-sans-bold" style={theme.textPrimary} numberOfLines={2}>
+                {displayTitle}
+              </Text>
+              <Text className="mt-0.5 text-sm font-sans-medium" style={theme.textMuted}>
+                {displayWeight} kg
+              </Text>
+            </View>
+            <Text className="text-base font-sans-extrabold" style={theme.textSuccess}>
+              GHS {amountLabel}
+            </Text>
+          </View>
         </View>
-      </View>
-    </SafeAreaView>
+
+        <View style={{ marginTop: 20, gap: 12 }}>
+          {!isCompleted ? (
+            <>
+              <View
+                className="flex-row items-center justify-center gap-2 rounded-xl border px-4 py-3"
+                style={theme.accentSoft}>
+                <ActivityIndicator size="small" color={colors.accent} />
+                <Text className="text-sm font-sans-medium" style={theme.textAccent}>
+                  Waiting for factory to scan…
+                </Text>
+              </View>
+              <View className="flex-row items-center justify-center gap-1.5 px-2">
+                <Feather name="lock" size={12} color={colors.mutedForeground} />
+                <Text className="text-center text-xs font-sans-medium" style={theme.textMuted}>
+                  Do not share — this code claims your materials
+                </Text>
+              </View>
+            </>
+          ) : null}
+
+          <Button
+            label={isCompleted ? 'Back to Discover' : 'Leave — keep in Orders'}
+            variant={isCompleted ? 'primary' : 'secondary'}
+            onPress={handleLeave}
+          />
+        </View>
+      </ScrollView>
+    </ThemedSafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#f4f7f5',
-  },
-  loadingBody: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  screen: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 8,
-    justifyContent: 'space-between',
-  },
-  status: {
-    alignItems: 'center',
-  },
-  checkCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#10b981',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  awaitingCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#eef2ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  statusTitle: {
-    fontSize: 22,
-    fontFamily: 'sans-extrabold',
-    color: '#0b1f1a',
-    textAlign: 'center',
-  },
-  statusSubtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    fontFamily: 'sans-medium',
-    color: '#6b7280',
-    textAlign: 'center',
-    paddingHorizontal: 12,
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    paddingHorizontal: 24,
-    paddingTop: 28,
-    paddingBottom: 22,
-    alignItems: 'center',
-    shadowColor: '#0b1f1a',
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
-  },
-  confirmedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#ecfdf5',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    alignSelf: 'stretch',
-  },
-  confirmedBadgeText: {
-    flex: 1,
-    fontSize: 13,
-    fontFamily: 'sans-semibold',
-    color: '#15803d',
-  },
-  qrWrap: {
-    padding: 14,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  codeLabel: {
-    marginTop: 18,
-    fontSize: 11,
-    fontFamily: 'sans-bold',
-    color: '#6b7280',
-    letterSpacing: 2,
-  },
-  code: {
-    marginTop: 4,
-    fontSize: 22,
-    fontFamily: 'sans-extrabold',
-    color: '#0b1f1a',
-    letterSpacing: 1.5,
-  },
-  divider: {
-    alignSelf: 'stretch',
-    height: 1,
-    backgroundColor: '#e5e7eb',
-    marginVertical: 18,
-  },
-  summaryRow: {
-    alignSelf: 'stretch',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  summaryLeft: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  itemTitle: {
-    fontSize: 15,
-    fontFamily: 'sans-bold',
-    color: '#0b1f1a',
-  },
-  itemMeta: {
-    marginTop: 2,
-    fontSize: 13,
-    fontFamily: 'sans-medium',
-    color: '#6b7280',
-  },
-  itemPrice: {
-    fontSize: 16,
-    fontFamily: 'sans-extrabold',
-    color: '#0b1f1a',
-  },
-  footer: {
-    gap: 12,
-  },
-  waitRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  waitText: {
-    fontSize: 13,
-    fontFamily: 'sans-medium',
-    color: '#6366f1',
-  },
-  lockRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  lockText: {
-    fontSize: 12,
-    fontFamily: 'sans-medium',
-    color: '#6b7280',
-    textAlign: 'center',
-  },
-  cta: {
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: '#0b1f1a',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ctaText: {
-    fontSize: 16,
-    fontFamily: 'sans-bold',
-    color: '#ffffff',
-  },
-  secondaryCta: {
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryCtaText: {
-    fontSize: 16,
-    fontFamily: 'sans-bold',
-    color: '#0b1f1a',
-  },
-});

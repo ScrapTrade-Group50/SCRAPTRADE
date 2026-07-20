@@ -2,19 +2,23 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ThemedSafeAreaView from '@/components/ThemedSafeAreaView';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { apiClient } from '../../api/client';
 import { showAlert } from '../../utils/alert';
+import ScreenHeader from '@/components/ScreenHeader';
+import { Button, TextField } from '@/components/ui';
+import { useThemeStore } from '@/store/themeStore';
+import { validateMomoNumber } from '@/utils/validation';
+import { buildGatePassHref } from '@/utils/gatePassRoute';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -24,6 +28,10 @@ type Listing = {
   weight: number;
   pricePerUnit: number;
   status: string;
+  pickupLocation?: string;
+  seller?: {
+    companyName?: string;
+  };
 };
 
 type PaymentConfig = {
@@ -38,7 +46,6 @@ function getPaystackRedirectUrl(): string {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     return `${window.location.origin}/checkout`;
   }
-  // Expo Go: exp://…/--/checkout — standalone builds: scraptrade://checkout
   return Linking.createURL('checkout');
 }
 
@@ -55,12 +62,14 @@ function parseReferenceFromUrl(url: string | null | undefined): string | null {
 
 export default function Checkout() {
   const router = useRouter();
+  const colors = useThemeStore((s) => s.colors);
   const { id } = useLocalSearchParams();
   const payInProgressRef = useRef(false);
 
   const [listing, setListing] = useState<Listing | null>(null);
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
   const [momoNumber, setMomoNumber] = useState('');
+  const [momoError, setMomoError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingPaystackReference, setPendingPaystackReference] = useState<string | null>(null);
   const [awaitingPaystackVerify, setAwaitingPaystackVerify] = useState(false);
@@ -95,7 +104,14 @@ export default function Checkout() {
     setPendingPaystackReference(null);
     setAwaitingPaystackVerify(false);
     router.replace(
-      `/(artisan)/gate-pass?code=${order.gatePassCode}&title=${encodeURIComponent(listing.title)}&weight=${listing.weight}&amount=${order.totalAmount}`
+      buildGatePassHref({
+        code: order.gatePassCode,
+        title: listing.title,
+        weight: listing.weight,
+        amount: order.totalAmount,
+        factory: listing.seller?.companyName,
+        pickup: listing.pickupLocation,
+      })
     );
   };
 
@@ -105,15 +121,16 @@ export default function Checkout() {
   };
 
   const handleSimulatedPayment = async () => {
-    if (momoNumber.length < 10) {
-      showAlert('Invalid Number', 'Please enter a valid 10-digit MoMo number.');
+    const err = validateMomoNumber(momoNumber);
+    if (err) {
+      setMomoError(err);
       return;
     }
 
     setIsProcessing(true);
     try {
       const response = await apiClient.post(
-        `/orders/checkout?listingId=${id}&momoNumber=${encodeURIComponent(momoNumber)}`
+        `/orders/checkout?listingId=${id}&momoNumber=${encodeURIComponent(momoNumber.trim())}`
       );
       goToGatePass(response.data);
     } catch (error: any) {
@@ -175,7 +192,6 @@ export default function Checkout() {
         return;
       }
 
-      // Manual return or redirect missed — payment may still have succeeded on Paystack
       await tryCompletePaystack(reference, true);
     } catch (error: any) {
       showAlert(
@@ -216,147 +232,142 @@ export default function Checkout() {
 
   if (!listing) {
     return (
-      <SafeAreaView className="bg-background flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color="#16a34a" />
-      </SafeAreaView>
+      <ThemedSafeAreaView className="items-center justify-center">
+        <ActivityIndicator size="large" color={colors.accent} />
+      </ThemedSafeAreaView>
     );
   }
 
   const itemPrice = listing.pricePerUnit * listing.weight;
   const total = itemPrice + ESCROW_FEE;
   const showVerifyButton = usePaystack && pendingPaystackReference && awaitingPaystackVerify;
+  const factoryName = listing.seller?.companyName || 'Verified Factory';
+  const pickupLocation = listing.pickupLocation || 'Contact factory for pickup details';
 
   return (
-    <SafeAreaView className="bg-background flex-1" style={{ flex: 1 }} edges={['top']}>
-      <View className="bg-background flex-row items-center px-6 py-4">
-        <TouchableOpacity onPress={() => router.back()} className="mr-4 p-1">
-          <Feather name="arrow-left" size={24} color="#0f172a" />
-        </TouchableOpacity>
-        <Text className="font-sans-bold text-primary text-xl">Secure Checkout</Text>
-      </View>
+    <ThemedSafeAreaView edges={['top']}>
+      <ScreenHeader title="Secure Checkout" />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}>
-        <View className="flex-1 px-5 pt-2 pb-6 flex-col">
-          <View className="bg-card border-border mb-6 rounded-2xl border p-5 shadow-sm">
+        <View className="flex-1 flex-col px-6 pb-6 pt-2">
+          <View className="mb-6 rounded-2xl border border-border bg-card p-5">
+            <View className="mb-4 flex-row items-start rounded-xl border border-border bg-muted/50 p-3">
+              <Feather name="map-pin" size={16} color={colors.mutedForeground} style={{ marginTop: 2 }} />
+              <View className="ml-2 flex-1">
+                <Text className="text-xs font-sans-bold uppercase tracking-wider text-muted-foreground">
+                  Pickup from
+                </Text>
+                <Text className="mt-0.5 text-sm font-sans-semibold text-primary">{factoryName}</Text>
+                <Text className="mt-0.5 text-sm font-sans-medium text-muted-foreground">
+                  {pickupLocation}
+                </Text>
+              </View>
+            </View>
+
             <View className="mb-3 flex-row items-center justify-between">
               <Text
-                className="font-sans-medium text-muted-foreground flex-1 pr-4 text-[15px]"
+                className="flex-1 pr-4 text-[15px] font-sans-medium text-muted-foreground"
                 numberOfLines={1}>
                 {listing.title}
               </Text>
-              <Text className="font-sans-semibold text-primary text-[15px]">
+              <Text className="text-[15px] font-sans-semibold text-primary">
                 {itemPrice.toFixed(2)} GHS
               </Text>
             </View>
 
             <View className="mb-3 flex-row items-center justify-between">
               <View className="flex-row items-center">
-                <Text className="font-sans-medium text-muted-foreground mr-2 text-[15px]">
+                <Text className="mr-2 text-[15px] font-sans-medium text-muted-foreground">
                   Escrow Fee
                 </Text>
-                <Feather name="shield" size={14} color="#10b981" />
+                <Feather name="shield" size={14} color={colors.success} />
               </View>
-              <Text className="font-sans-semibold text-primary text-[15px]">
+              <Text className="text-[15px] font-sans-semibold text-primary">
                 {ESCROW_FEE.toFixed(2)} GHS
               </Text>
             </View>
 
-            <View className="bg-border mb-3 h-px w-full" />
+            <View className="mb-3 h-px w-full bg-border" />
 
             <View className="flex-row items-center justify-between">
-              <Text className="font-sans-bold text-primary text-lg">Total</Text>
-              <Text className="font-sans-extrabold text-xl text-green-600">
+              <Text className="text-lg font-sans-bold text-primary">Total</Text>
+              <Text className="text-xl font-sans-extrabold text-success">
                 {total.toFixed(2)} GHS
               </Text>
             </View>
           </View>
 
           {!usePaystack && (
-            <View className="mb-4">
-              <Text className="font-sans-semibold text-primary text-sm mb-2">
-                Mobile Money Number
-              </Text>
-              <View className="border-border bg-card h-14 flex-row items-center rounded-xl border px-4 shadow-sm">
-                <Feather name="smartphone" size={20} color="#64748b" />
-                <TextInput
-                  className="font-sans-medium text-primary ml-3 h-full flex-1 text-base"
-                  placeholder="024 123 4567"
-                  placeholderTextColor="#94a3b8"
-                  keyboardType="phone-pad"
-                  value={momoNumber}
-                  onChangeText={setMomoNumber}
-                  maxLength={10}
-                  editable={!isProcessing}
-                  autoFocus
-                />
-              </View>
-            </View>
+            <TextField
+              label="Mobile Money Number"
+              leftIcon="smartphone"
+              placeholder="0241234567"
+              keyboardType="phone-pad"
+              value={momoNumber}
+              error={momoError}
+              maxLength={10}
+              editable={!isProcessing}
+              autoFocus
+              containerClassName="mb-4"
+              onChangeText={(v) => {
+                setMomoNumber(v.replace(/\D/g, '').slice(0, 10));
+                setMomoError(null);
+              }}
+            />
           )}
 
           {usePaystack ? (
-            <View className="mb-4 flex-row items-center rounded-xl border border-blue-100 bg-blue-50 p-3">
-              <Feather name="credit-card" size={18} color="#1d4ed8" />
-              <Text className="font-sans-medium text-xs text-blue-900 flex-1 ml-2">
+            <View className="mb-4 flex-row items-center rounded-xl border border-accent/25 bg-accent/10 p-3">
+              <Feather name="credit-card" size={18} color={colors.accent} />
+              <Text className="ml-2 flex-1 text-xs font-sans-medium text-primary">
                 Pay securely with Paystack — card, mobile money, or bank. Funds stay in escrow until
                 factory pickup.
               </Text>
             </View>
           ) : (
-            <View className="mb-4 flex-row items-center rounded-xl border border-amber-100 bg-amber-50 p-3">
-              <Feather name="info" size={18} color="#b45309" />
-              <Text className="font-sans-medium text-xs text-amber-900 flex-1 ml-2">
-                Demo mode: payment is simulated. Set PAYMENT_PROVIDER=paystack on the backend for live
-                checkout.
+            <View className="mb-4 flex-row items-center rounded-xl border border-border bg-muted p-3">
+              <Feather name="info" size={18} color={colors.mutedForeground} />
+              <Text className="ml-2 flex-1 text-xs font-sans-medium text-muted-foreground">
+                Demo mode: payment is simulated. Set PAYMENT_PROVIDER=paystack on the backend for
+                live checkout.
               </Text>
             </View>
           )}
 
           {showVerifyButton && (
-            <View className="mb-4 flex-row items-center rounded-xl border border-indigo-100 bg-indigo-50 p-3">
-              <Feather name="check-circle" size={18} color="#4338ca" />
-              <Text className="font-sans-medium text-xs text-indigo-900 flex-1 ml-2">
+            <View className="mb-4 flex-row items-center rounded-xl border border-accent/25 bg-accent/10 p-3">
+              <Feather name="check-circle" size={18} color={colors.accent} />
+              <Text className="ml-2 flex-1 text-xs font-sans-medium text-primary">
                 Paid on Paystack? Tap Verify payment below to get your gate pass.
               </Text>
             </View>
           )}
 
-          <View className="mb-4 flex-row items-center rounded-xl border border-green-100 bg-green-50 p-3">
-            <Feather name="lock" size={18} color="#15803d" />
-            <Text className="font-sans-medium text-xs text-green-800 flex-1 ml-2">
+          <View className="mb-4 flex-row items-center rounded-xl border border-success/25 bg-success/10 p-3">
+            <Feather name="lock" size={18} color={colors.success} />
+            <Text className="ml-2 flex-1 text-xs font-sans-medium text-primary">
               Funds held securely in Escrow until the factory scans your gate pass at pickup.
             </Text>
           </View>
 
-          <TouchableOpacity
+          <Button
+            label={usePaystack ? 'Pay with Paystack' : 'Confirm & Pay'}
+            loading={isProcessing}
             onPress={handlePayment}
-            disabled={isProcessing}
-            className={`w-full flex-row items-center justify-center gap-2 rounded-xl h-14 shadow-sm ${
-              isProcessing ? 'bg-green-800' : 'bg-green-600'
-            }`}>
-            {isProcessing ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <>
-                <Text className="font-sans-bold text-base text-white">
-                  {usePaystack ? 'Pay with Paystack' : 'Confirm & Pay'}
-                </Text>
-                <Feather name="arrow-right" size={18} color="#ffffff" />
-              </>
-            )}
-          </TouchableOpacity>
+          />
 
           {showVerifyButton && (
             <TouchableOpacity
               onPress={handleVerifyPaystackPayment}
               disabled={isProcessing}
-              className="mt-3 w-full flex-row items-center justify-center rounded-xl border border-blue-200 bg-white h-12">
-              <Text className="font-sans-semibold text-blue-700">Verify payment</Text>
+              className="mt-3 h-12 w-full flex-row items-center justify-center rounded-xl border border-border bg-card">
+              <Text className="font-sans-semibold text-accent">Verify payment</Text>
             </TouchableOpacity>
           )}
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </ThemedSafeAreaView>
   );
 }
