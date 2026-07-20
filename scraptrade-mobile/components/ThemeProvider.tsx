@@ -1,29 +1,15 @@
 import React, { useEffect, useMemo } from 'react';
-import { Appearance, Platform, View } from 'react-native';
+import { Appearance, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { VariableContextProvider, vars } from 'nativewind';
-import { getThemeColors, getThemeVariables } from '@/constants/theme';
+import { getThemeVariables } from '@/constants/theme';
 import { useThemeStore } from '@/store/themeStore';
+import { applyResolvedColorScheme } from '@/utils/colorScheme';
 
 type ThemeProviderProps = {
   children: React.ReactNode;
 };
-
-function applyWebDocumentTheme(resolved: 'light' | 'dark') {
-  if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-
-  const root = document.documentElement;
-  root.style.colorScheme = resolved;
-  root.dataset.theme = resolved;
-
-  const themeVars = getThemeVariables(resolved);
-  for (const [key, value] of Object.entries(themeVars)) {
-    root.style.setProperty(key, value);
-  }
-
-  document.body.style.backgroundColor = getThemeColors(resolved).background;
-}
 
 export default function ThemeProvider({ children }: ThemeProviderProps) {
   const mode = useThemeStore((s) => s.mode);
@@ -39,10 +25,8 @@ export default function ThemeProvider({ children }: ThemeProviderProps) {
     void hydrate();
   }, [hydrate]);
 
-  // NativeWind v5: prefers-color-scheme is driven by Appearance.
   useEffect(() => {
-    Appearance.setColorScheme(resolved);
-    applyWebDocumentTheme(resolved);
+    applyResolvedColorScheme(resolved);
     void SystemUI.setBackgroundColorAsync(colors.background);
   }, [resolved, colors.background]);
 
